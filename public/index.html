@@ -9,6 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Stoyanka">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -136,6 +137,10 @@ textarea.raw{width:100%;min-height:140px;font-family:var(--mono);font-size:12px;
 <script>
 (function(){
 "use strict";
+var TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData!==undefined&&Telegram.WebApp.platform!=="unknown"?Telegram.WebApp:null;
+if(TG){try{TG.ready();TG.expand();TG.setHeaderColor("#14532d")}catch(e){}}
+function cloudSet(k,v){try{if(TG&&TG.CloudStorage)TG.CloudStorage.setItem(k,v)}catch(e){}}
+function cloudGet(k,cb){try{if(TG&&TG.CloudStorage&&TG.isVersionAtLeast("6.9")){TG.CloudStorage.getItem(k,function(err,v){cb(err?"":v||"")});return}}catch(e){}cb("")}
 var DAY=864e5, TZ=5*36e5, TOKKEY="stoyanka-token";
 var TYPES=["Yengil avtomobil","Yuk avtomobili","Avtobus","Mototsikl","Boshqa"], photoCache={};
 var token="", S={me:null,set:{name:"Shtrafstoyanka",tariff:48000,evac:1000000},cars:[]}, ST=null, adminData={staff:[],log:[]};
@@ -648,12 +653,13 @@ document.addEventListener("submit",function(e){
   if(c.length<6){er.textContent="Kodni to'liq kiriting.";return}
   api("GET","/api/status?k="+encodeURIComponent(c)).then(function(j){
     if(!j.valid){er.textContent="Kod noto'g'ri.";return}
-    K=c;try{localStorage.setItem("stoyanka-k",K)}catch(x){}
+    K=c;try{localStorage.setItem("stoyanka-k",K)}catch(x){}cloudSet("k",K);
     try{var ml=document.querySelector('link[rel=manifest]');if(!ml){ml=document.createElement("link");ml.rel="manifest";document.head.appendChild(ml)}ml.href="/api/manifest?k="+encodeURIComponent(K)}catch(x){}
     ST=j;render();
   },function(){er.textContent="Ulanib bo'lmadi. Internetni tekshiring."});
 });
 /* ---------- boshlash ---------- */
+function boot(){
 render();
 api("GET","/api/status?k="+encodeURIComponent(K)).then(function(j){
   ST=j;
@@ -661,6 +667,8 @@ api("GET","/api/status?k="+encodeURIComponent(K)).then(function(j){
 }).then(render).catch(function(e){
   $("#root").innerHTML='<div class="login"><h1>Ulanib bo\'lmadi</h1><p class="meta">'+esc(e.message)+'</p><button class="btn pri" onclick="location.reload()">Qayta urinish</button></div>';
 });
+}
+if(K||!TG)boot();else cloudGet("k",function(v){if(v&&v.length>=6){K=v;try{localStorage.setItem("stoyanka-k",K);var ml=document.createElement("link");ml.rel="manifest";ml.href="/api/manifest?k="+encodeURIComponent(K);document.head.appendChild(ml)}catch(e){}}boot()});
 })();
 </script>
 </body>

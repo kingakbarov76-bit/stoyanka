@@ -72,6 +72,7 @@ export async function setupWebhook(env0, url) {
     secret_token: await hookSecret(env),
     allowed_updates: ["message", "callback_query"],
   });
+  await tg(env, "setChatMenuButton", { menu_button: { type: "web_app", text: "Ilova", web_app: { url: url.origin + "/" } } });
   await tg(env, "setMyCommands", { commands: [{ command: "start", description: "Boshlash" }, { command: "panel", description: "Boshliq paneli" }] });
   if (env.OWNER_ID) await tg(env, "setMyCommands", { commands: COMMANDS, scope: { type: "chat", chat_id: Number(env.OWNER_ID) } });
   return plain(r.ok ? "Bot ulandi. Endi Telegramda botingizga /start yozing." : "Xato: " + (r.description || "noma'lum"));
@@ -388,7 +389,9 @@ async function show(env, q, text, markup) {
 }
 
 const START_TXT = "Salom! Kim sifatida kirasiz?";
-const START_KB = { inline_keyboard: [[{ text: "🚗 Mashinam shtrafstoyankadami?", callback_data: "u:1" }], [{ text: "🏢 Men stoyanka boshlig'iman", callback_data: "b:0" }]] };
+let APP_URL = "";
+const appBtn = () => (APP_URL ? [{ text: "📱 Ilovani ochish (xodimlar uchun)", web_app: { url: APP_URL } }] : []);
+const START_KB = { get inline_keyboard() { const rows = [[{ text: "🚗 Mashinam shtrafstoyankadami?", callback_data: "u:1" }], [{ text: "🏢 Men stoyanka boshlig'iman", callback_data: "b:0" }]]; if (APP_URL) rows.push(appBtn()); return rows; } };
 const BACK = { inline_keyboard: [[{ text: "⬅️ Panelga qaytish", callback_data: "bk:0" }]] };
 
 async function panelView(env, url, t) {
@@ -409,6 +412,7 @@ async function panelView(env, url, t) {
       [{ text: "🔗 Sayt havolasi", callback_data: "lk:0" }, { text: "🔄 Yangilash", callback_data: "bk:0" }],
       [{ text: lk ? "⛔ Mashina tekshiruvini o'chirish" : "🔎 Mashina tekshiruvini yoqish", callback_data: "lu:0" }],
       [{ text: "💳 Obunani uzaytirish", callback_data: "rn:0" }],
+      ...(APP_URL ? [appBtn()] : []),
     ],
   };
   return { text, kb };
@@ -629,6 +633,7 @@ export async function handleHook(req, env0, url) {
     await say(env, chat, `Sizning Telegram ID raqamingiz: <code>${from.id}</code>\nShu raqamni suhbatda yozing, bot faqat sizga javob beradigan qilib qo'yiladi.`);
     return new Response("ok");
   }
+  APP_URL = url.origin + "/";
   const owner = String(from.id) === String(env.OWNER_ID);
   const text = msg && typeof msg.text === "string" ? msg.text.trim() : "";
   const isPrivate = msg ? msg.chat.type === "private" : !!(cq && cq.message && cq.message.chat.type === "private");
