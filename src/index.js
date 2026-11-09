@@ -2,6 +2,7 @@
 // Statik sayt public/ papkasidan beriladi. /api/* mijozlar uchun, /tg/* Telegram bot uchun.
 
 import { handleHook, setupWebhook, dailyReminder } from "./bot.js";
+import { makeXlsx } from "./xlsx.js";
 
 const DAY = 864e5;
 const TZ = 5 * 36e5; // Toshkent vaqti (UTC+5): kun hisobi shu bo'yicha
@@ -35,6 +36,13 @@ const int = (v, max = 1e9) => {
   return Number.isFinite(v) ? Math.min(Math.max(v, 0), max) : 0;
 };
 const validPin = (p) => /^\d{4,8}$/.test(String(p || ""));
+const TYPES = ["Yengil avtomobil", "Yuk avtomobili", "Avtobus", "Mototsikl", "Boshqa"];
+const p2 = (n) => (n < 10 ? "0" + n : "" + n);
+const fmtDT = (t) => {
+  const d = new Date(t + TZ);
+  return `${p2(d.getUTCDate())}.${p2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`;
+};
+const PHOTO_MAX = 4, PHOTO_BYTES = 300000, PHOTO_TTL = 450 * 86400;
 
 /* ---------- xavfsizlik ---------- */
 async function hashPin(pin, salt) {
@@ -100,10 +108,18 @@ async function tenantByCode(env, code) {
 
 /* ---------- ma'lumot ---------- */
 async function getSettings(env, tid) {
-  const rows = (await env.DB.prepare("SELECT key,value FROM settings WHERE tenant_id=? AND key IN ('lot','tariff','evac')").bind(tid).all()).results;
+  const rows = (await env.DB.prepare("SELECT key,value FROM settings WHERE tenant_id=? AND key IN ('lot','tariff','evac','prices','phone','address','staffprice')").bind(tid).all()).results;
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const num = (v, d) => (v == null || isNaN(Number(v)) ? d : Number(v));
-  return { name: m.lot || "Shtrafstoyanka", tariff: num(m.tariff, 48000), evac: num(m.evac, 1000000) };
+  const defT = num(m.tariff, 48000), defE = num(m.evac, 1000000);
+  let saved = {};
+  try { saved = JSON.parse(m.prices || "{}"); } catch { saved = {}; }
+  const prices = {};
+  for (const ty of TYPES) {
+    const q = saved[ty] || {};
+    prices[ty] = { tariff: num(q.tariff, defT), evac: num(q.evac, defE) };
+  }
+  return { name: m.lot || "Shtrafstoyanka", tariff: defT, evac: defE, prices, phone: m.phone || "", address: m.address || "", staffPrice: m.staffprice === "1" };
 }
 const setSetting = (env, tid, k, v) =>
   env.DB.prepare("INSERT INTO settings(tenant_id,key,value) VALUES(?,?,?) ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value")
@@ -114,8 +130,9 @@ const logAct = (env, tid, u, action, carId, detail) =>
     .bind(tid, Date.now(), u ? u.name : null, action, carId || null, detail || null)
     .run();
 
-function mapCar(r) {
+function mapCar(r, photos) {
   return {
+    photos: (photos && photos[r.id]) || [],
     id: r.id, plate: r.plate, type: r.type || "", model: r.model || "", color: r.color || "",
     broughtBy: r.brought_by || "", driver: r.driver || "", phone: r.phone || "", reason: r.reason || "",
     inAt: r.in_at, note: r.note || "", tariff: r.tariff, evac: r.evac, status: r.status, createdBy: r.created_by || "",
@@ -132,12 +149,27 @@ async function failState(env, tid, name) {
   try { return JSON.parse(r.value); } catch { return { n: 0, t: 0 }; }
 }
 
+async function deletePhotos(env, where, args) {
+  const rows = (await env.DB.prepare(`SELECT id,key FROM car_photos WHERE ${where}`).bind(...args).all()).results;
+  for (const r of rows) await env.PHOTOS.delete(r.key);
+  if (rows.length) await env.DB.prepare(`DELETE FROM car_photos WHERE ${where}`).bind(...args).run();
+}
+// Chiqarilganiga 60 kundan oshgan mashinalarning rasmlari o'chiriladi (joy tejash uchun).
+async function cleanupPhotos(env) {
+  const rows = (await env.DB.prepare("SELECT p.id id, p.key key FROM car_photos p JOIN cars c ON c.id=p.car_id WHERE c.status='out' AND c.out_at<? LIMIT 200").bind(Date.now() - 60 * DAY).all()).results;
+  for (const r of rows) {
+    await env.PHOTOS.delete(r.key);
+    await env.DB.prepare("DELETE FROM car_photos WHERE id=?").bind(r.id).run();
+  }
+}
+
 /* ---------- yo'nalishlar ---------- */
 async function api(req, env, url) {
   const path = url.pathname.replace(/\/+$/, "");
   const m = req.method;
   let body = {};
-  if (m === "POST" || m === "PUT") {
+  const isUpload = m === "POST" && /^\/api\/cars\/[\w-]+\/photos$/.test(path);
+  if ((m === "POST" || m === "PUT") && !isUpload) {
     try { body = await req.json(); } catch { body = {}; }
   }
 
@@ -198,11 +230,14 @@ async function api(req, env, url) {
 
   if (path === "/api/state" && m === "GET") {
     const cars = (await env.DB.prepare("SELECT * FROM cars WHERE tenant_id=? AND (status='in' OR out_at>=?) ORDER BY in_at").bind(T, Date.now() - 400 * DAY).all()).results;
+    const ph = (await env.DB.prepare("SELECT id,car_id,by_name FROM car_photos WHERE tenant_id=? ORDER BY id").bind(T).all()).results;
+    const photos = {};
+    for (const x of ph) (photos[x.car_id] = photos[x.car_id] || []).push({ id: x.id, by: x.by_name || "" });
     return J({
       me: { name: u.name, role: u.role },
       settings: await getSettings(env, T),
       sub: { expiresAt: tenant.expires_at, daysLeft: Math.max(0, Math.ceil((tenant.expires_at - Date.now()) / DAY)), contact: await getContact(env) },
-      cars: cars.map(mapCar),
+      cars: cars.map((c) => mapCar(c, photos)),
     });
   }
 
@@ -225,11 +260,13 @@ async function api(req, env, url) {
     const set = await getSettings(env, T);
     const id = crypto.randomUUID();
     const inAt = int(body.inAt, 4e12) || Date.now();
-    const tariff = admin && body.tariff != null ? int(body.tariff) : set.tariff;
-    const evac = body.evac != null ? int(body.evac) : set.evac;
+    const type = TYPES.includes(body.type) ? body.type : "Boshqa";
+    const pr = set.prices[type];
+    const tariff = (admin || set.staffPrice) && body.tariff != null ? int(body.tariff) : pr.tariff;
+    const evac = body.evac != null ? int(body.evac) : pr.evac;
     await env.DB.prepare(
       "INSERT INTO cars(id,tenant_id,plate,type,model,color,brought_by,driver,phone,reason,in_at,note,tariff,evac,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'in',?)"
-    ).bind(id, T, plate, str(body.type, 40), str(body.model), str(body.color, 40), str(body.broughtBy), str(body.driver), str(body.phone, 30),
+    ).bind(id, T, plate, type, str(body.model), str(body.color, 40), str(body.broughtBy), str(body.driver), str(body.phone, 30),
       str(body.reason, 80), inAt, str(body.note, 500), tariff, evac, u.name).run();
     await logAct(env, T, u, "car_add", id, plate);
     return J(mapCar(await env.DB.prepare("SELECT * FROM cars WHERE id=?").bind(id).first()), 201);
@@ -261,11 +298,13 @@ async function api(req, env, url) {
       if (!plate) return err("Davlat raqamini kiriting");
       const dup = await env.DB.prepare("SELECT id FROM cars WHERE tenant_id=? AND status='in' AND plate=? AND id<>?").bind(T, plate, id).first();
       if (dup) return err("Bu raqam maydonda allaqachon bor", 409);
-      const tariff = admin && body.tariff != null ? int(body.tariff) : c.tariff;
-      const evac = admin && body.evac != null ? int(body.evac) : c.evac;
+      const canPrice = admin || (await getSettings(env, T)).staffPrice;
+      const tariff = canPrice && body.tariff != null ? int(body.tariff) : c.tariff;
+      const evac = canPrice && body.evac != null ? int(body.evac) : c.evac;
+      const type = TYPES.includes(body.type) ? body.type : c.type;
       await env.DB.prepare(
         "UPDATE cars SET plate=?,type=?,model=?,color=?,brought_by=?,driver=?,phone=?,reason=?,in_at=?,note=?,tariff=?,evac=? WHERE id=? AND tenant_id=?"
-      ).bind(plate, str(body.type, 40), str(body.model), str(body.color, 40), str(body.broughtBy), str(body.driver), str(body.phone, 30),
+      ).bind(plate, type, str(body.model), str(body.color, 40), str(body.broughtBy), str(body.driver), str(body.phone, 30),
         str(body.reason, 80), int(body.inAt, 4e12) || c.in_at, str(body.note, 500), tariff, evac, id, T).run();
       await logAct(env, T, u, "car_edit", id, plate);
       return J(mapCar(await env.DB.prepare("SELECT * FROM cars WHERE id=?").bind(id).first()));
@@ -273,20 +312,88 @@ async function api(req, env, url) {
 
     if (!mm[2] && m === "DELETE") {
       if (!admin) return err("Faqat boshliq o'chira oladi", 403);
+      await deletePhotos(env, "car_id=? AND tenant_id=?", [id, T]);
       await env.DB.prepare("DELETE FROM cars WHERE id=? AND tenant_id=?").bind(id, T).run();
       await logAct(env, T, u, "car_delete", id, `${c.plate} (${c.status}${c.out_paid != null ? ", " + c.out_paid + " so'm" : ""})`);
       return J({ ok: true });
     }
   }
 
+  // Rasmlar
+  mm = path.match(/^\/api\/cars\/([\w-]+)\/photos$/);
+  if (mm && m === "POST") {
+    const c = await env.DB.prepare("SELECT id,plate,status FROM cars WHERE id=? AND tenant_id=?").bind(mm[1], T).first();
+    if (!c) return err("Topilmadi", 404);
+    if (c.status !== "in") return err("Chiqarilgan mashinaga rasm qo'shib bo'lmaydi", 409);
+    const cnt = await env.DB.prepare("SELECT COUNT(*) n FROM car_photos WHERE car_id=?").bind(c.id).first();
+    if (cnt.n >= PHOTO_MAX) return err(`Bitta mashinaga ko'pi bilan ${PHOTO_MAX} ta rasm`, 409);
+    if (Number(req.headers.get("content-length") || 0) > PHOTO_BYTES + 2048) return err("Rasm juda katta", 413);
+    const buf = await req.arrayBuffer();
+    if (buf.byteLength > PHOTO_BYTES) return err("Rasm juda katta", 413);
+    const b = new Uint8Array(buf);
+    if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8 || b[2] !== 0xff) return err("Faqat JPEG rasm qabul qilinadi");
+    const key = `t${T}/${crypto.randomUUID()}`;
+    await env.PHOTOS.put(key, buf, { expirationTtl: PHOTO_TTL });
+    await env.DB.prepare("INSERT INTO car_photos(tenant_id,car_id,key,at,by_name) VALUES(?,?,?,?,?)").bind(T, c.id, key, Date.now(), u.name).run();
+    const row = await env.DB.prepare("SELECT id FROM car_photos WHERE key=?").bind(key).first();
+    await logAct(env, T, u, "photo_add", c.id, c.plate);
+    return J({ id: row.id, by: u.name }, 201);
+  }
+  mm = path.match(/^\/api\/photos\/(\d+)$/);
+  if (mm) {
+    const row = await env.DB.prepare("SELECT * FROM car_photos WHERE id=? AND tenant_id=?").bind(Number(mm[1]), T).first();
+    if (!row) return err("Topilmadi", 404);
+    if (m === "GET") {
+      const data = await env.PHOTOS.get(row.key, { type: "arrayBuffer" });
+      if (!data) return err("Rasm topilmadi", 404);
+      return new Response(data, { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=86400" } });
+    }
+    if (m === "DELETE") {
+      if (!admin && row.by_name !== u.name) return err("Faqat boshliq yoki rasmni qo'shgan xodim o'chira oladi", 403);
+      await deletePhotos(env, "id=?", [row.id]);
+      await logAct(env, T, u, "photo_delete", row.car_id, null);
+      return J({ ok: true });
+    }
+  }
+
   // Faqat boshliq
-  if (!admin && (path.startsWith("/api/staff") || path === "/api/settings" || path === "/api/log")) return err("Ruxsat yo'q", 403);
+  if (!admin && (path.startsWith("/api/staff") || path === "/api/settings" || path === "/api/log" || path === "/api/export")) return err("Ruxsat yo'q", 403);
+
+  if (path === "/api/export" && m === "GET") {
+    const dp = (v, def) => {
+      const mt = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return mt ? Date.UTC(+mt[1], +mt[2] - 1, +mt[3]) - TZ : def;
+    };
+    const nowDay = dayIdx(Date.now()) * DAY - TZ;
+    const from = dp(url.searchParams.get("from"), nowDay - 30 * DAY);
+    const to = dp(url.searchParams.get("to"), nowDay) + DAY;
+    if (to <= from || to - from > 800 * DAY) return err("Sanalar noto'g'ri");
+    const rows = (await env.DB.prepare("SELECT * FROM cars WHERE tenant_id=? AND status='out' AND out_at>=? AND out_at<? ORDER BY out_at LIMIT 5000").bind(T, from, to).all()).results;
+    const head = ["№", "Chiqarilgan vaqt", "Davlat raqami", "Toifa", "Marka / model", "Qabul vaqti", "Kun", "Evakuatsiya", "Saqlash", "Chegirma", "To'langan", "Qabul qilgan xodim"].map((v) => ({ v, bold: true }));
+    const body2 = rows.map((r, i) => [i + 1, fmtDT(r.out_at), r.plate, r.type || "", r.model || "", fmtDT(r.in_at), r.out_days, r.out_evac, r.out_storage, r.out_discount, r.out_paid, r.out_by || ""]);
+    const sum = (k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
+    const total = [{ v: "Jami", bold: true }, "", "", "", "", "", { v: sum("out_days"), bold: true }, { v: sum("out_evac"), bold: true }, { v: sum("out_storage"), bold: true }, { v: sum("out_discount"), bold: true }, { v: sum("out_paid"), bold: true }, ""];
+    const file = makeXlsx("Tushum", [head, ...body2, total], [5, 18, 16, 18, 22, 18, 7, 14, 14, 12, 14, 20]);
+    const fn = `tushum_${new Date(from + TZ).toISOString().slice(0, 10)}_${new Date(to - DAY + TZ).toISOString().slice(0, 10)}.xlsx`;
+    await logAct(env, T, u, "export", null, `${rows.length} ta yozuv`);
+    return new Response(file, { headers: { "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "content-disposition": `attachment; filename="${fn}"`, "cache-control": "no-store" } });
+  }
 
   if (path === "/api/settings" && m === "PUT") {
+    const prices = {};
+    const inP = body.prices && typeof body.prices === "object" ? body.prices : {};
+    for (const ty of TYPES) {
+      const q = inP[ty] || {};
+      prices[ty] = { tariff: int(q.tariff), evac: int(q.evac) };
+    }
     await setSetting(env, T, "lot", str(body.name, 60) || "Shtrafstoyanka");
-    await setSetting(env, T, "tariff", int(body.tariff));
-    await setSetting(env, T, "evac", int(body.evac));
-    await logAct(env, T, u, "settings", null, `tarif ${int(body.tariff)}, evakuatsiya ${int(body.evac)}`);
+    await setSetting(env, T, "phone", str(body.phone, 60));
+    await setSetting(env, T, "address", str(body.address, 150));
+    await setSetting(env, T, "staffprice", body.staffPrice ? "1" : "0");
+    await setSetting(env, T, "prices", JSON.stringify(prices));
+    await setSetting(env, T, "tariff", prices["Yengil avtomobil"].tariff);
+    await setSetting(env, T, "evac", prices["Yengil avtomobil"].evac);
+    await logAct(env, T, u, "settings", null, "Narxlar va ma'lumotlar o'zgardi");
     return J(await getSettings(env, T));
   }
   if (path === "/api/log" && m === "GET") {
@@ -346,5 +453,6 @@ export default {
   },
   async scheduled(event, env, ctx) {
     ctx.waitUntil(dailyReminder(env).catch((e) => console.error(e)));
+    ctx.waitUntil(cleanupPhotos(env).catch((e) => console.error(e)));
   },
 };

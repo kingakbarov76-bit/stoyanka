@@ -104,17 +104,34 @@ label.f input,label.f select,label.f textarea{width:100%;min-width:0}
 .list-row:last-child{border-bottom:0}
 textarea.raw{width:100%;min-height:140px;font-family:var(--mono);font-size:12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}}}
+.photos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.thumb{aspect-ratio:1;border-radius:10px;background:var(--line);overflow:hidden;border:0;padding:0;display:block;width:100%}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.addph{aspect-ratio:1;border:2px dashed var(--line);border-radius:10px;background:none;color:var(--muted);font-weight:700;font-size:13px;padding:4px}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px}
+#lightbox.open{display:flex}
+#lightbox img{max-width:100%;max-height:76%;border-radius:8px;object-fit:contain}
+.receipt{background:#fff;color:#111;border-radius:12px;padding:16px;font-family:var(--mono);font-size:13px;line-height:1.55;border:1px solid var(--line)}
+.receipt h4{margin:0 0 4px;font-size:16px;text-align:center}
+.receipt .r{display:flex;justify-content:space-between;gap:10px}
+.receipt hr{border:0;border-top:1px dashed #888;margin:8px 0}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+.chk input{width:22px;height:22px;flex:none;margin-top:1px}
+.prow{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+@media print{body *{visibility:hidden}#receipt,#receipt *{visibility:visible}#receipt{position:fixed;left:0;top:0;width:100%;border:0}}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <div id="modal" role="dialog" aria-modal="true"></div>
 <div id="toast" role="status"></div>
+<div id="lightbox" role="dialog" aria-modal="true"></div>
 
 <script>
 (function(){
 "use strict";
 var DAY=864e5, TZ=5*36e5, TOKKEY="stoyanka-token";
+var TYPES=["Yengil avtomobil","Yuk avtomobili","Avtobus","Mototsikl","Boshqa"], photoCache={};
 var token="", S={me:null,set:{name:"Shtrafstoyanka",tariff:48000,evac:1000000},cars:[]}, ST=null, adminData={staff:[],log:[]};
 var tab="in", q="", busy=false;
 var K="";
@@ -134,6 +151,8 @@ function days(from,to){return Math.max(1,dayIdx(to)-dayIdx(from))}
 function num(v){var n=parseInt(String(v).replace(/\D/g,""),10);return isNaN(n)?0:n}
 function normPlate(s){return String(s||"").toUpperCase().replace(/\s+/g," ").trim()}
 function isAdmin(){return S.me&&S.me.role==="admin"}
+function priceOf(t){var p=(S.set.prices||{})[t];return p||{tariff:S.set.tariff,evac:S.set.evac}}
+function canPrice(){return isAdmin()||!!S.set.staffPrice}
 function plateHtml(p){
   p=normPlate(p);var m=p.match(/^(\d{2})\s*(.+)$/);
   if(m)return '<span class="plate"><span class="c">'+esc(m[1])+'</span><span class="n">'+esc(m[2])+'</span></span>';
@@ -145,7 +164,7 @@ function calc(c,at){
   return {days:d,storage:st,evac:c.evac,total:st+c.evac};
 }
 var ACT={login:"Kirdi",setup:"Tizim sozlandi",car_add:"Mashina qo'shildi",car_edit:"Mashina tahrirlandi",car_delete:"Mashina o'chirildi",car_pay:"To'lov va chiqarish",
-  settings:"Sozlama o'zgardi",staff_add:"Xodim qo'shildi",staff_pin_reset:"PIN almashtirildi",staff_enable:"Xodim yoqildi",staff_disable:"Xodim o'chirildi",pin_change:"PIN o'zgartirildi"};
+  settings:"Sozlama o'zgardi",staff_add:"Xodim qo'shildi",staff_pin_reset:"PIN almashtirildi",staff_enable:"Xodim yoqildi",staff_disable:"Xodim o'chirildi",pin_change:"PIN o'zgartirildi",photo_add:"Rasm qo'shildi",photo_delete:"Rasm o'chirildi",export:"Excel yuklandi"};
 
 /* ---------- server bilan aloqa ---------- */
 function api(method,path,body){
@@ -169,6 +188,105 @@ function refresh(){
 function loadAdmin(){
   if(!isAdmin())return Promise.resolve();
   return Promise.all([api("GET","/api/staff"),api("GET","/api/log")]).then(function(r){adminData.staff=r[0].staff;adminData.log=r[1].log});
+}
+
+/* ---------- rasmlar ---------- */
+function loadPhoto(id){
+  if(photoCache[id])return Promise.resolve(photoCache[id]);
+  return fetch("/api/photos/"+id,{headers:{authorization:"Bearer "+token}}).then(function(r){if(!r.ok)throw new Error("rasm");return r.blob()}).then(function(b){return (photoCache[id]=URL.createObjectURL(b))});
+}
+function compress(file){
+  return new Promise(function(res,rej){
+    var img=new Image(),url=URL.createObjectURL(file);
+    img.onload=function(){
+      var w=img.naturalWidth,h=img.naturalHeight,k=Math.min(1,1024/Math.max(w,h));
+      var c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+      var q=0.72;
+      (function tryQ(){c.toBlob(function(b){
+        if(!b)return rej(new Error("Rasmni qayta ishlab bo'lmadi"));
+        if(b.size>280000&&q>0.4){q-=0.12;return tryQ()}
+        res(b);
+      },"image/jpeg",q)})();
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);rej(new Error("Rasmni o'qib bo'lmadi"))};
+    img.src=url;
+  });
+}
+function renderPhotos(carId){
+  var box=$("#photos");if(!box||box.getAttribute("data-car")!==carId)return;
+  var c=S.cars.find(function(x){return x.id===carId});if(!c)return;
+  var h=c.photos.map(function(p){return '<button class="thumb" data-a="photo" data-id="'+p.id+'" aria-label="Rasmni ochish"><img alt="Mashina rasmi"></button>'}).join("");
+  if(c.status==="in"&&c.photos.length<4)h+='<button class="addph" data-a="addphoto">+ Rasm</button>';
+  box.innerHTML=h||'<div class="meta" style="grid-column:1/-1">Rasm yo\'q</div>';
+  var imgs=box.querySelectorAll(".thumb");
+  c.photos.forEach(function(p,i){loadPhoto(p.id).then(function(u){var im=imgs[i]&&imgs[i].querySelector("img");if(im)im.src=u},function(){})});
+}
+function uploadPhotos(carId,files){
+  var c=S.cars.find(function(x){return x.id===carId});if(!c)return;
+  files=Array.prototype.slice.call(files,0,4-c.photos.length);
+  if(!files.length){toast("Bitta mashinaga ko'pi bilan 4 ta rasm");return}
+  lock(null,function(){
+    return files.reduce(function(p,f,i){
+      return p.then(function(){
+        toast("Rasm yuklanmoqda "+(i+1)+"/"+files.length);
+        return compress(f).then(function(b){
+          return fetch("/api/cars/"+carId+"/photos",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"image/jpeg"},body:b}).then(function(r){
+            return r.json().catch(function(){return {}}).then(function(j){
+              if(!r.ok)throw new Error(j.error||"Rasm yuklanmadi");
+              c.photos.push({id:j.id,by:j.by});renderPhotos(carId);
+            });
+          },function(){throw new Error("Internet yo'q yoki server javob bermayapti")});
+        });
+      });
+    },Promise.resolve()).then(function(){toast("Rasm saqlandi")});
+  });
+}
+function openLightbox(id){
+  var c=S.cars.find(function(x){return x.photos.some(function(p){return String(p.id)===String(id)})});if(!c)return;
+  var p=c.photos.find(function(x){return String(x.id)===String(id)});
+  var can=isAdmin()||p.by===S.me.name;
+  var lb=$("#lightbox");
+  lb.innerHTML='<img alt="Mashina rasmi" src="'+(photoCache[id]||"")+'"><div class="btns" style="width:100%;max-width:420px"><button class="btn" data-a="lbclose">Yopish</button>'+(can?'<button class="btn dng" data-a="lbdelete" data-id="'+id+'" data-car="'+c.id+'">O\'chirish</button>':'')+'</div>';
+  lb.classList.add("open");
+  if(!photoCache[id])loadPhoto(id).then(function(u){var im=lb.querySelector("img");if(im)im.src=u});
+}
+function closeLightbox(){var lb=$("#lightbox");lb.classList.remove("open");lb.innerHTML=""}
+
+/* ---------- chek ---------- */
+function receiptRows(c){
+  var o=c.out,rows=[["Davlat raqami",c.plate],["Marka / model",c.model||"—"],["Qabul",fmtDate(c.inAt)],["Chiqdi",fmtDate(o.at)],
+    ["Saqlash",o.days+" kun x "+fmt(c.tariff)],["Evakuatsiya",fmt(o.evac)+" so'm"],["Saqlash puli",fmt(o.storage)+" so'm"]];
+  if(o.discount)rows.push(["Chegirma","-"+fmt(o.discount)+" so'm"]);
+  return rows;
+}
+function receiptText(c){
+  var o=c.out,t=[S.set.name];
+  if(S.set.phone)t.push(S.set.phone);
+  if(S.set.address)t.push(S.set.address);
+  t.push("Chek № "+c.id.slice(0,6).toUpperCase(),"");
+  receiptRows(c).forEach(function(r){t.push(r[0]+": "+r[1])});
+  t.push("","JAMI TO'LANGAN: "+fmt(o.paid)+" so'm","Qabul qildi: "+o.by);
+  return t.join("\n");
+}
+function openReceipt(c){
+  if(!c||!c.out)return;
+  var o=c.out;
+  var html='<div class="receipt" id="receipt"><h4>'+esc(S.set.name)+'</h4>'+
+    (S.set.phone?'<div style="text-align:center">'+esc(S.set.phone)+'</div>':'')+(S.set.address?'<div style="text-align:center">'+esc(S.set.address)+'</div>':'')+
+    '<hr><div>Chek № '+esc(c.id.slice(0,6).toUpperCase())+'</div><hr>'+
+    receiptRows(c).map(function(r){return '<div class="r"><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>'}).join("")+
+    '<hr><div class="r" style="font-weight:700;font-size:15px"><span>JAMI TO\'LANGAN</span><span>'+fmt(o.paid)+' so\'m</span></div><hr>'+
+    '<div>Qabul qildi: '+esc(o.by)+'</div><div style="text-align:center;margin-top:6px">Rahmat!</div></div>'+
+    '<div class="btns"><button class="btn" data-a="rcopy" data-id="'+c.id+'">Matnni nusxalash</button><button class="btn" data-a="rprint">Chop etish</button><button class="btn pri" data-a="close" style="flex-basis:100%">Yopish</button></div>';
+  openModal("Chek",html);
+}
+function copyText(t){
+  function fallback(){
+    var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
+    try{document.execCommand("copy");toast("Nusxalandi")}catch(e){toast("Nusxalab bo'lmadi")}ta.remove();
+  }
+  try{navigator.clipboard.writeText(t).then(function(){toast("Nusxalandi")},fallback)}catch(e){fallback()}
 }
 
 /* ---------- oyna va xabarlar ---------- */
@@ -286,19 +404,24 @@ function reportHtml(){
       return '<div class="bar"><em>'+Math.round(x.v/1000)+'</em><i style="height:'+Math.round(x.v/max*85)+'%"></i><span>'+x.l+'</span></div>'}).join("")+'</div></div>'+
     '<div class="card"><h2>Oxirgi to\'lovlar</h2>'+(recent.length?recent.map(function(c){
       return '<div class="list-row"><div>'+plateHtml(c.plate)+'<div class="meta" style="margin-top:4px">'+fmtDate(c.out.at)+' &middot; '+esc(c.out.by)+(c.out.discount?' &middot; chegirma '+fmt(c.out.discount):'')+'</div></div><span class="money">'+fmt(c.out.paid)+'</span></div>'}).join(""):'<div class="meta">Hali to\'lov yo\'q.</div>')+
-    '<div class="list-row"><span class="meta">Jami tushum (oxirgi 400 kun)</span><span class="money big">'+fmt(all)+' so\'m</span></div></div>';
+    '<div class="list-row"><span class="meta">Jami tushum (oxirgi 400 kun)</span><span class="money big">'+fmt(all)+' so\'m</span></div></div>'+
+    '<div class="card form"><h2>Excel hisobot</h2><div class="grid2"><label class="f">Dan<input id="x-from" type="date" value="'+new Date(now+TZ).toISOString().slice(0,8)+'01"></label>'+
+    '<label class="f">Gacha<input id="x-to" type="date" value="'+new Date(now+TZ).toISOString().slice(0,10)+'"></label></div>'+
+    '<button class="btn" data-a="export">Excel yuklab olish</button></div>';
 }
 
 function settingsHtml(){
   var h='';
   if(isAdmin()){
     if(S.sub)h+='<div class="card"><h2>Obuna</h2><div class="meta">Tugaydi: '+fmtDate(S.sub.expiresAt).slice(0,10)+' ('+S.sub.daysLeft+' kun qoldi)'+(S.sub.contact?'. Aloqa: '+esc(S.sub.contact):'')+'</div></div>';
-    h+='<div class="card form"><h2>Tariflar</h2>'+
-    '<label class="f">Stoyanka nomi<input id="s-name" value="'+esc(S.set.name)+'"></label>'+
-    '<div class="grid2"><label class="f">Saqlash (so\'m/kun)<input id="s-tariff" inputmode="numeric" value="'+S.set.tariff+'"></label>'+
-    '<label class="f">Evakuatsiya (so\'m)<input id="s-evac" inputmode="numeric" value="'+S.set.evac+'"></label></div>'+
+    h+='<div class="card form"><h2>Stoyanka ma\'lumoti va narxlar</h2>'+
+    '<label class="f">Nomi<input id="s-name" value="'+esc(S.set.name)+'"></label>'+
+    '<label class="f">Telefon (mashina egasiga botda ko\'rinadi)<input id="s-phone" inputmode="tel" value="'+esc(S.set.phone||"")+'"></label>'+
+    '<label class="f">Manzil<input id="s-addr" value="'+esc(S.set.address||"")+'"></label>'+
+    TYPES.map(function(t,i){var p=priceOf(t);return '<div class="prow"><b>'+esc(t)+'</b><div class="grid2"><label class="f">Saqlash, 1 kun<input id="pt-'+i+'" inputmode="numeric" value="'+p.tariff+'"></label><label class="f">Evakuatsiya<input id="pe-'+i+'" inputmode="numeric" value="'+p.evac+'"></label></div></div>'}).join("")+
+    '<label class="chk"><input type="checkbox" id="s-sp"'+(S.set.staffPrice?' checked':'')+'><span>Xodim mashina qo\'shayotganda narxni o\'zgartira oladi</span></label>'+
     '<button class="btn pri" data-a="savesettings">Saqlash</button>'+
-    '<div class="meta">Yangi tarif faqat keyin qo\'shiladigan mashinalarga ta\'sir qiladi. Maydondagilarning tarifi o\'zgarmaydi.</div></div>'+
+    '<div class="meta">Narxlar mashina toifasi tanlanganda o\'zi chiqadi. Yangi narxlar faqat keyin qo\'shiladigan mashinalarga ta\'sir qiladi, maydondagilarniki o\'zgarmaydi.</div></div>'+
     '<div class="card"><h2>Xodimlar</h2>'+adminData.staff.map(function(s){
       return '<div class="list-row"><span>'+esc(s.name)+(s.role==="admin"?' <span class="pill warn">boshliq</span>':'')+(!s.active?' <span class="pill out">o\'chirilgan</span>':'')+'</span>'+
         '<span style="display:flex;gap:6px">'+(s.active?'<button class="btn" style="flex:none;min-width:0;padding:8px 12px" data-a="resetpin" data-id="'+s.id+'">PIN</button>':'')+
@@ -328,25 +451,27 @@ function carDetail(id){
     ["Sabab",c.reason||"—"],["Qabul",fmtDate(c.inAt)],["Izoh",c.note||"—"],["Kiritgan xodim",c.createdBy||"—"]];
   var body='<div style="display:flex;justify-content:space-between;align-items:center">'+plateHtml(c.plate)+(c.status==="in"?'<span class="pill ok">Maydonda</span>':'<span class="pill out">Chiqarilgan</span>')+'</div>'+
     '<dl class="kv">'+rows.map(function(r){return '<dt>'+r[0]+'</dt><dd>'+esc(r[1])+'</dd>'}).join("")+'</dl>'+
+    '<h2 style="margin:4px 0 0">Rasmlar</h2><div class="photos" id="photos" data-car="'+c.id+'"></div><input type="file" id="ph-file" accept="image/*" multiple hidden>'+
     '<h2 style="margin:4px 0 0">Hisob-kitob</h2><div class="calc">'+
     '<div class="l"><span>Evakuatsiya</span><span class="money">'+fmt(k.evac)+' so\'m</span></div>'+
     '<div class="l"><span>Saqlash ('+k.days+' kun &times; '+fmt(c.tariff)+')</span><span class="money">'+fmt(k.storage)+' so\'m</span></div>'+
     (c.status==="out"?'<div class="l"><span>Chegirma</span><span class="money">&minus;'+fmt(c.out.discount)+' so\'m</span></div>':'')+
     '<div class="l t"><span>'+(c.status==="out"?"To'langan":"Jami")+'</span><span class="money">'+fmt(c.status==="out"?c.out.paid:k.total)+' so\'m</span></div></div>'+
     (c.status==="out"?'<div class="meta">Chiqarildi: '+fmtDate(c.out.at)+', qabul qildi: '+esc(c.out.by)+'</div>':'')+
-    '<div class="btns">'+(c.status==="in"?'<button class="btn" data-a="edit" data-id="'+c.id+'">Tahrirlash</button>':'')+
+    '<div class="btns">'+(c.status==="in"?'<button class="btn" data-a="edit" data-id="'+c.id+'">Tahrirlash</button>':'<button class="btn" data-a="receipt" data-id="'+c.id+'">Chek</button>')+
     (isAdmin()?'<button class="btn dng" data-a="del" data-id="'+c.id+'">O\'chirish</button>':'')+
     (c.status==="in"?'<button class="btn pri" data-a="pay" data-id="'+c.id+'" style="flex-basis:100%">To\'lov va chiqarish</button>':'')+'</div>';
   openModal("Mashina",body);
+  renderPhotos(c.id);
 }
 function carForm(id){
   var c=id?S.cars.find(function(x){return x.id===id}):null;
-  var v=c||{plate:"",type:"Yengil avtomobil",model:"",color:"",broughtBy:"",driver:"",phone:"",reason:"MIB (Majburiy ijro byurosi)",inAt:Date.now(),note:"",tariff:S.set.tariff,evac:S.set.evac};
+  var v=c||{plate:"",type:"Yengil avtomobil",model:"",color:"",broughtBy:"",driver:"",phone:"",reason:"MIB (Majburiy ijro byurosi)",inAt:Date.now(),note:"",tariff:priceOf("Yengil avtomobil").tariff,evac:priceOf("Yengil avtomobil").evac};
   function opt(list,sel){return list.map(function(o){return '<option'+(o===sel?' selected':'')+'>'+esc(o)+'</option>'}).join("")}
   var types=["Yengil avtomobil","Yuk avtomobili","Avtobus","Mototsikl","Boshqa"];
   var reasons=["MIB (Majburiy ijro byurosi)","YHXX","Sud qarori","Boshqa"];
   if(reasons.indexOf(v.reason)<0)reasons.push(v.reason);
-  var evacLocked=c&&!isAdmin(), tarLocked=!isAdmin();
+  var evacLocked=c&&!canPrice(), tarLocked=!canPrice();
   openModal(c?"Tahrirlash":"Yangi mashina",
     '<form class="form" id="carform" data-id="'+(c?c.id:"")+'">'+
     '<label class="f">Davlat raqami<input id="f-plate" required autocomplete="off" autocapitalize="characters" placeholder="20 R 981 JA" value="'+esc(v.plate)+'"></label>'+
@@ -363,6 +488,13 @@ function carForm(id){
     '<label class="f">Izoh<textarea id="f-note" rows="2">'+esc(v.note)+'</textarea></label>'+
     '<div class="btns"><button type="button" class="btn" data-a="close">Bekor qilish</button><button class="btn pri" type="submit">Saqlash</button></div></form>');
   var fe=$("#f-plate");if(fe&&!c)fe.focus();
+  $("#f-tariff").oninput=function(){this.setAttribute("data-t","1")};
+  $("#f-evac").oninput=function(){this.setAttribute("data-t","1")};
+  $("#f-type").onchange=function(){
+    if(c)return;var p=priceOf(this.value),tf=$("#f-tariff"),ef=$("#f-evac");
+    if(!tf.getAttribute("data-t"))tf.value=p.tariff;
+    if(!ef.getAttribute("data-t"))ef.value=p.evac;
+  };
 }
 function payForm(id){
   var c=S.cars.find(function(x){return x.id===id});if(!c)return;
@@ -383,7 +515,7 @@ function payForm(id){
     var btn=this;
     lock(btn,function(){
       return api("POST","/api/cars/"+id+"/pay",{discount:num(inp.value)}).then(function(car){
-        replaceCar(car);closeModal();render();toast("Mashina chiqarildi: "+fmt(car.out.paid)+" so'm");
+        replaceCar(car);closeModal();render();toast("Mashina chiqarildi: "+fmt(car.out.paid)+" so'm");openReceipt(car);
       }).catch(function(e){if(e.status===409){return refresh().then(function(){closeModal();render()}).then(function(){throw e})}throw e});
     });
   };
@@ -405,6 +537,34 @@ document.addEventListener("click",function(e){
     else if(tab!=="set")refresh().then(function(){renderMain()}).catch(fail);
     return;
   }
+  if(a==="photo"){openLightbox(id);return}
+  if(a==="addphoto"){var pf=$("#ph-file");if(pf)pf.click();return}
+  if(a==="lbclose"){closeLightbox();return}
+  if(a==="lbdelete"){
+    if(!t.getAttribute("data-sure")){t.setAttribute("data-sure","1");t.textContent="Aniq o'chirasizmi?";return}
+    var cid=t.getAttribute("data-car");
+    lock(null,function(){return api("DELETE","/api/photos/"+id).then(function(){
+      var cc=S.cars.find(function(x){return x.id===cid});if(cc)cc.photos=cc.photos.filter(function(p){return String(p.id)!==String(id)});
+      delete photoCache[id];closeLightbox();renderPhotos(cid);toast("Rasm o'chirildi");
+    })});
+    return;
+  }
+  if(a==="receipt"){openReceipt(S.cars.find(function(x){return x.id===id}));return}
+  if(a==="rprint"){try{window.print()}catch(e){toast("Chop etib bo'lmadi")}return}
+  if(a==="rcopy"){var rc=S.cars.find(function(x){return x.id===id});if(rc)copyText(receiptText(rc));return}
+  if(a==="export"){
+    lock(t,function(){
+      return fetch("/api/export?from="+encodeURIComponent($("#x-from").value)+"&to="+encodeURIComponent($("#x-to").value),{headers:{authorization:"Bearer "+token}}).then(function(r){
+        if(!r.ok)return r.json().catch(function(){return {}}).then(function(j){throw new Error(j.error||"Yuklab bo'lmadi")});
+        var fn=((r.headers.get("content-disposition")||"").match(/filename="([^"]+)"/)||[])[1]||"tushum.xlsx";
+        return r.blob().then(function(b){
+          var u=URL.createObjectURL(b),lnk=document.createElement("a");lnk.href=u;lnk.download=fn;document.body.appendChild(lnk);lnk.click();
+          setTimeout(function(){URL.revokeObjectURL(u);lnk.remove()},3000);toast("Fayl yuklandi");
+        });
+      },function(){throw new Error("Internet yo'q yoki server javob bermayapti")});
+    });
+    return;
+  }
   if(a==="newcar")carForm();
   else if(a==="open")carDetail(id);
   else if(a==="edit")carForm(id);
@@ -412,7 +572,8 @@ document.addEventListener("click",function(e){
   else if(a==="del"){confirmBox("Bu yozuv butunlay o'chiriladi. Davom etasizmi?","Ha, o'chirish",function(){
     lock(null,function(){return api("DELETE","/api/cars/"+id).then(function(){S.cars=S.cars.filter(function(c){return c.id!==id});closeModal();render();toast("O'chirildi")})})})}
   else if(a==="savesettings"){
-    lock(t,function(){return api("PUT","/api/settings",{name:$("#s-name").value,tariff:num($("#s-tariff").value),evac:num($("#s-evac").value)}).then(function(s){S.set=s;render();loadAdmin().then(function(){renderMain()});toast("Saqlandi")})});
+    var prices={};TYPES.forEach(function(ty,i){prices[ty]={tariff:num($("#pt-"+i).value),evac:num($("#pe-"+i).value)}});
+    lock(t,function(){return api("PUT","/api/settings",{name:$("#s-name").value,phone:$("#s-phone").value,address:$("#s-addr").value,staffPrice:$("#s-sp").checked,prices:prices}).then(function(s){S.set=s;render();loadAdmin().then(function(){renderMain()});toast("Saqlandi")})});
   }
   else if(a==="togglestaff"){
     var on=t.getAttribute("data-on")==="1";
@@ -421,6 +582,12 @@ document.addEventListener("click",function(e){
   else if(a==="resetpin"){
     var s=adminData.staff.find(function(x){return String(x.id)===id});
     openModal("PIN almashtirish",'<form class="form" id="resetform" data-id="'+id+'"><div class="meta">'+esc(s?s.name:"")+' uchun yangi PIN</div><label class="f">Yangi PIN<input id="rp-pin" inputmode="numeric" autocomplete="off" required placeholder="4-8 raqam"></label><div class="btns"><button type="button" class="btn" data-a="close">Bekor qilish</button><button class="btn pri" type="submit">Saqlash</button></div></form>');
+  }
+});
+document.addEventListener("change",function(e){
+  if(e.target&&e.target.id==="ph-file"){
+    var box=$("#photos");if(box)uploadPhotos(box.getAttribute("data-car"),e.target.files);
+    e.target.value="";
   }
 });
 document.addEventListener("submit",function(e){
@@ -448,7 +615,7 @@ document.addEventListener("submit",function(e){
     if(!$("#f-evac").disabled)data.evac=num($("#f-evac").value);
     lock(btn,function(){
       var p=id?api("PUT","/api/cars/"+id,data):api("POST","/api/cars",data);
-      return p.then(function(car){replaceCar(car);closeModal();tab="in";q="";render();toast("Saqlandi")});
+      return p.then(function(car){replaceCar(car);closeModal();tab="in";q="";render();toast("Saqlandi");if(!id)carDetail(car.id)});
     });
   }
 });

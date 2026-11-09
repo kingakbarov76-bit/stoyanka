@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id 
 CREATE INDEX IF NOT EXISTS idx_cars_tenant ON cars(tenant_id, status, plate);
 CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_log_tenant ON log(tenant_id, id);
+CREATE TABLE IF NOT EXISTS car_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, car_id TEXT NOT NULL, key TEXT NOT NULL, at INTEGER NOT NULL, by_name TEXT);
+CREATE INDEX IF NOT EXISTS idx_photos_car ON car_photos(car_id);

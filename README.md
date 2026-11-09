@@ -5,7 +5,9 @@ Shtrafstoyanka uchun hisob tizimi. Bir joyda ko'p mijoz (stoyanka) ishlaydi, har
 - `public/index.html`: telefon uchun sayt
 - `src/index.js`: Cloudflare Worker (API)
 - `src/bot.js`: Telegram boshqaruv boti (faqat egasi uchun)
+- `src/xlsx.js`: Excel (.xlsx) fayl yaratish
 - `schema.sql`: Cloudflare D1 baza jadvallari
+- Rasmlar Cloudflare KV (`PHOTOS`) da saqlanadi: har bir mashinaga 4 tagacha, chiqarilganiga 60 kun o'tgach o'zi o'chadi
 - `wrangler.jsonc`: sozlama (D1 ulanishi, kunlik eslatma)
 
 ## Joylash
@@ -31,6 +33,10 @@ Repo Cloudflare Workers'ga ulangan. `main` ga push qilinsa o'zi qayta joylanadi.
 - `/ochir 5 HA`: mijoz va uning barcha ma'lumotini o'chirish
 
 Har kuni 09:00 (Toshkent) 3 kun ichida tugaydigan mijozlar haqida eslatma keladi.
+
+## Mashina egasi uchun bot
+
+Botga istalgan odam mashina raqamini yozsa (masalan `20 R 981 JA`), mashina maydonda bo'lsa stoyanka nomi, qabul sanasi, kun, to'lash kerak bo'lgan summa, telefon va manzil ko'rsatiladi. Haydovchi telefoni va xodim ismlari ko'rsatilmaydi. Muddati tugagan yoki to'xtatilgan mijozning mashinalari ko'rinmaydi. Boshqaruv buyruqlari faqat egasida ishlaydi.
 
 ## Qoidalar
 

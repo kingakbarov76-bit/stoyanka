@@ -12,6 +12,7 @@ const fmtD = (t) => {
   return `${p2(d.getUTCDate())}.${p2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
 };
 const money = (n) => Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+const dayIdx = (t) => Math.floor((t + TZ) / DAY);
 const daysLeft = (t) => Math.ceil((t.expires_at - Date.now()) / DAY);
 
 async function sha(s) {
@@ -68,7 +69,8 @@ export async function setupWebhook(env0, url) {
     secret_token: await hookSecret(env),
     allowed_updates: ["message", "callback_query"],
   });
-  await tg(env, "setMyCommands", { commands: COMMANDS });
+  await tg(env, "setMyCommands", { commands: [{ command: "start", description: "Mashina raqamini tekshirish" }] });
+  if (env.OWNER_ID) await tg(env, "setMyCommands", { commands: COMMANDS, scope: { type: "chat", chat_id: Number(env.OWNER_ID) } });
   return plain(r.ok ? "Bot ulandi. Endi Telegramda botingizga /start yozing." : "Xato: " + (r.description || "noma'lum"));
 }
 
@@ -230,13 +232,45 @@ async function command(env, url, chat, text) {
     const t = id ? await getT(env, id) : null;
     if (!t) return say(env, chat, "Namuna: <code>/ochir 5 HA</code>");
     if ((args[1] || "").toUpperCase() !== "HA") return say(env, chat, `<b>${esc(t.name)}</b> va uning BARCHA mashinalari, xodimlari, tarixi o'chadi. Tasdiqlash uchun: <code>/ochir ${id} HA</code>`);
-    for (const tbl of ["cars", "staff", "log", "payments"]) await env.DB.prepare(`DELETE FROM ${tbl} WHERE tenant_id=?`).bind(id).run();
+    const ph = (await env.DB.prepare("SELECT key FROM car_photos WHERE tenant_id=?").bind(id).all()).results;
+    for (const r of ph) await env.PHOTOS.delete(r.key);
+    for (const tbl of ["car_photos", "cars", "staff", "log", "payments"]) await env.DB.prepare(`DELETE FROM ${tbl} WHERE tenant_id=?`).bind(id).run();
     await env.DB.prepare("DELETE FROM settings WHERE tenant_id=?").bind(id).run();
     await env.DB.prepare("DELETE FROM tenants WHERE id=?").bind(id).run();
     return say(env, chat, `${esc(t.name)} o'chirildi.`);
   }
 
   return say(env, chat, "Tushunmadim. /yordam ni yuboring.");
+}
+
+/* ---------- mashina egasi: raqam bo'yicha tekshiruv ---------- */
+const CYR = { "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X", "У": "Y", "І": "I" };
+const normPlateText = (t) => String(t || "").toUpperCase().replace(/[АВЕКМНОРСТХУІ]/g, (c) => CYR[c]).replace(/[^A-Z0-9]/g, "");
+const WELCOME = "Salom! Mashinangiz shtrafstoyankada ekanini tekshirish uchun davlat raqamini yozing.\nMasalan: <code>20 R 981 JA</code>";
+
+async function lookup(env, chat, text) {
+  const norm = normPlateText(text);
+  if (norm.length < 5 || norm.length > 10) return say(env, chat, "Davlat raqamini to'g'ri yozing. Masalan: <code>20 R 981 JA</code>");
+  const rows = (await env.DB.prepare(
+    "SELECT c.*, t.name tname FROM cars c JOIN tenants t ON t.id=c.tenant_id WHERE c.status='in' AND REPLACE(UPPER(c.plate),' ','')=? AND t.active=1 AND t.expires_at>=? LIMIT 5"
+  ).bind(norm, Date.now()).all()).results;
+  if (!rows.length) {
+    return say(env, chat, `<b>${esc(text.trim().slice(0, 20).toUpperCase())}</b> raqamli mashina shtrafstoyankada topilmadi.\nRaqamni to'g'ri yozganingizni tekshiring.`);
+  }
+  for (const c of rows) {
+    const st = (await env.DB.prepare("SELECT key,value FROM settings WHERE tenant_id=? AND key IN ('lot','phone','address')").bind(c.tenant_id).all()).results;
+    const m = Object.fromEntries(st.map((r) => [r.key, r.value]));
+    const days = Math.max(1, dayIdx(Date.now()) - dayIdx(c.in_at));
+    const storage = days * c.tariff, total = storage + c.evac;
+    let out = `🚗 <b>${esc(c.plate)}</b> shtrafstoyankada turibdi\n\n` +
+      `📍 ${esc(m.lot || c.tname)}\n📅 Qabul qilingan: ${fmtD(c.in_at)}\n` +
+      `⏱ Saqlash: ${days} kun × ${money(c.tariff)} so'm\n\n` +
+      `💰 <b>To'lash kerak: ${money(total)} so'm</b>\n(evakuatsiya ${money(c.evac)} + saqlash ${money(storage)})`;
+    if (m.phone) out += `\n\n📞 ${esc(m.phone)}`;
+    if (m.address) out += `\n🏠 ${esc(m.address)}`;
+    out += "\n\nSaqlash puli har kuni oshib boradi. Mashinani olish uchun hujjatlaringiz bilan stoyankaga murojaat qiling.";
+    await say(env, chat, out);
+  }
 }
 
 async function callback(env, url, q) {
@@ -268,13 +302,19 @@ export async function handleHook(req, env0, url) {
     await say(env, chat, `Sizning Telegram ID raqamingiz: <code>${from.id}</code>\nShu raqamni suhbatda yozing, bot faqat sizga javob beradigan qilib qo'yiladi.`);
     return new Response("ok");
   }
-  if (String(from.id) !== String(env.OWNER_ID)) {
-    await say(env, chat, "Bu bot yopiq.");
-    return new Response("ok");
+  const owner = String(from.id) === String(env.OWNER_ID);
+  const text = msg && typeof msg.text === "string" ? msg.text.trim() : "";
+  if (cq) {
+    if (owner) await callback(env, url, cq);
+  } else if (owner && text.startsWith("/")) {
+    await command(env, url, chat, text);
+  } else if (!owner && /^\/start(@\w+)?$/i.test(text)) {
+    await say(env, chat, WELCOME);
+  } else if (text && !text.startsWith("/")) {
+    await lookup(env, chat, text);
+  } else if (msg) {
+    await say(env, chat, WELCOME);
   }
-  if (cq) await callback(env, url, cq);
-  else if (msg && typeof msg.text === "string" && msg.text.startsWith("/")) await command(env, url, chat, msg.text);
-  else if (msg) await say(env, chat, "Buyruqlar uchun /yordam ni yuboring.");
   return new Response("ok");
 }
 

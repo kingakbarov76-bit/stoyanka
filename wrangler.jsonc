@@ -14,6 +14,12 @@
       "database_id": "0836a330-fdf6-46d8-ba22-4c095af13304"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "PHOTOS",
+      "id": "c5c7070ffd8148aa89f16a5025863f74"
+    }
+  ],
   "triggers": {
     "crons": ["0 4 * * *"]
   }
