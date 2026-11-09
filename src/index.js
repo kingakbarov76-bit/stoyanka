@@ -69,7 +69,7 @@ async function hmac(key, data) {
   return b64u(await crypto.subtle.sign("HMAC", k, enc.encode(data)));
 }
 async function makeToken(env, tid, name) {
-  const p = b64u(enc.encode(JSON.stringify({ n: name, t: tid, e: Date.now() + 30 * DAY })));
+  const p = b64u(enc.encode(JSON.stringify({ n: name, t: tid, e: Date.now() + 365 * DAY })));
   return p + "." + (await hmac(await secret(env), p));
 }
 async function whoAmI(env, req) {
