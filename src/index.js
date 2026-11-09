@@ -174,6 +174,14 @@ async function api(req, env, url) {
   }
 
   // Ochiq yo'nalishlar (havola kodi bilan)
+  if (path === "/api/manifest" && m === "GET") {
+    const kk = String(url.searchParams.get("k") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+    return new Response(JSON.stringify({
+      name: "Stoyanka hisobi", short_name: "Stoyanka", lang: "uz", display: "standalone", orientation: "portrait",
+      start_url: "/?k=" + kk, scope: "/", background_color: "#14532d", theme_color: "#14532d",
+      icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" }, { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" }],
+    }), { headers: { "content-type": "application/manifest+json", "cache-control": "no-store" } });
+  }
   if (path === "/api/status" && m === "GET") {
     const t = await tenantByCode(env, url.searchParams.get("k"));
     if (!t) return J({ valid: false });
