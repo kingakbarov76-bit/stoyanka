@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Stoyanka">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>if(location.hash.indexOf("tgWebApp")>-1||window.TelegramWebviewProxy)document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>')</script>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -38,6 +38,29 @@
   --ok:#4cc38a; --okbg:#1c3a2c; --warn:#f0b53a; --warnbg:#3a2f12; --danger:#ff7a70; --dangerbg:#3d1f1c;
   color-scheme:dark;
 }
+
+/* Kirish sahifasi (hero), yon menyu, mavzu tugmasi */
+.login.hero-on{max-width:460px;padding:0 0 24px;gap:0}
+.hero{background:linear-gradient(160deg,var(--brand),#12513b 70%,#1d6f52);color:var(--brand-ink);padding:20px 20px 26px;border-radius:0 0 22px 22px;position:relative}
+.hero .brandrow{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.hero .logo{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:22px}
+.hero .brandrow b{display:block;font-size:17px}.hero .brandrow small{opacity:.75;font-size:13px}
+.hero h1{font-size:27px;line-height:1.15;margin:0 0 8px}.hero h1 span{color:#f0b53a}
+.hero p{margin:0 0 16px;opacity:.85;font-size:14px}
+.hero .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hero .stats div{background:rgba(255,255,255,.1);border-radius:12px;padding:10px 6px;text-align:center}
+.hero .stats b{display:block;font-size:17px}.hero .stats small{font-size:11px;opacity:.8}
+.themebtn{background:rgba(255,255,255,.16);border:0;color:inherit;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;position:absolute;top:16px;right:16px}
+.login.hero-on>:not(.hero){margin:16px 16px 0}
+.hamb{background:rgba(255,255,255,.14);border:0;color:inherit;border-radius:10px;width:40px;height:40px;font-size:20px;flex:none}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(78vw,300px);background:var(--surface);z-index:21;transform:translateX(-100%);transition:transform .2s;display:flex;flex-direction:column;padding:16px 12px;gap:6px;box-shadow:4px 0 24px rgba(0,0,0,.25)}
+body.menu-open .scrim{opacity:1;pointer-events:auto}body.menu-open .drawer{transform:none}
+.drawer h2{margin:4px 8px 10px;font-size:17px}
+.drawer button{background:none;border:0;text-align:left;padding:13px 12px;border-radius:10px;font-size:16px;font-weight:600;color:var(--ink)}
+.drawer button[aria-current="true"]{background:var(--okbg);color:var(--ok)}
+.drawer .sp{flex:1}
+.top .who{pointer-events:none}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
@@ -49,11 +72,11 @@ header.top{background:var(--brand);color:var(--brand-ink);padding:14px 16px;disp
 header.top h1{font-size:18px;margin:0;font-weight:700}
 header.top small{display:block;opacity:.75;font-size:12px}
 .who{background:rgba(255,255,255,.14);border:0;color:inherit;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600}
-main{flex:1;padding:14px 16px 110px;display:flex;flex-direction:column;gap:12px}
+main{flex:1;padding:14px 16px 96px;display:flex;flex-direction:column;gap:12px}
 .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);z-index:6}
 .tabbar button{background:none;border:0;padding:12px 4px 14px;font-size:13px;font-weight:600;color:var(--muted);border-top:3px solid transparent}
 .tabbar button[aria-current="true"]{color:var(--ink);border-top-color:var(--accent)}
-.fab{position:fixed;bottom:72px;right:max(16px,calc(50% - 280px + 16px));background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:14px 20px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:6}
+.fab{position:fixed;bottom:24px;right:max(16px,calc(50% - 280px + 16px));background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:14px 20px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:6}
 .search{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
 .car{display:flex;flex-direction:column;gap:10px;width:100%;text-align:left;cursor:pointer}
@@ -141,6 +164,13 @@ var TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData!==undefined&&T
 if(TG){try{TG.ready();TG.expand();TG.setHeaderColor("#14532d")}catch(e){}}
 function cloudSet(k,v){try{if(TG&&TG.CloudStorage)TG.CloudStorage.setItem(k,v)}catch(e){}}
 function cloudGet(k,cb){try{if(TG&&TG.CloudStorage&&TG.isVersionAtLeast("6.9")){TG.CloudStorage.getItem(k,function(err,v){cb(err?"":v||"")});return}}catch(e){}cb("")}
+
+var THEME="auto";try{THEME=localStorage.getItem("stoyanka-theme")||"auto"}catch(e){}
+function applyTheme(){var r=document.documentElement,t=THEME;if(t==="auto"&&TG&&TG.colorScheme)t=TG.colorScheme;if(t==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",t)}
+function themeLabel(){return THEME==="light"?"\u2600\uFE0F Yorug\u2018":THEME==="dark"?"\uD83C\uDF19 Qorong\u2018u":"\uD83C\uDF13 Avto"}
+applyTheme();
+function heroHTML(name){return '<div class="hero"><button type="button" class="themebtn" data-a="theme">'+themeLabel()+'</button><div class="brandrow"><span class="logo">\uD83D\uDE97</span><div><b>'+esc(name||"Stoyanka hisobi")+'</b><small>Nazorat tizimi</small></div></div><h1>Har bir avtomobil. <span>To\u2018liq nazoratda.</span></h1><p>Qabul qilish, saqlash, chiqarish va tushumlarni bitta joyda nazorat qiling.</p><div class="stats"><div><b>24/7</b><small>Onlayn</small></div><div><b>\uD83D\uDCF7</b><small>Rasmli hujjat</small></div><div><b>Excel</b><small>Hisobot</small></div></div></div>'}
+function heroify(name){var l=document.querySelector("#root .login");if(!l||l.querySelector(".hero"))return;l.classList.add("hero-on");l.insertAdjacentHTML("afterbegin",heroHTML(name))}
 var DAY=864e5, TZ=5*36e5, TOKKEY="stoyanka-token";
 var TYPES=["Yengil avtomobil","Yuk avtomobili","Avtobus","Mototsikl","Boshqa"], photoCache={};
 var token="", S={me:null,set:{name:"Shtrafstoyanka",tariff:48000,evac:1000000},cars:[]}, ST=null, adminData={staff:[],log:[]};
@@ -176,7 +206,7 @@ function calc(c,at){
   return {days:d,storage:st,evac:c.evac,total:st+c.evac};
 }
 var ACT={login:"Kirdi",setup:"Tizim sozlandi",car_add:"Mashina qo'shildi",car_edit:"Mashina tahrirlandi",car_delete:"Mashina o'chirildi",car_pay:"To'lov va chiqarish",
-  settings:"Sozlama o'zgardi",staff_add:"Xodim qo'shildi",staff_pin_reset:"PIN almashtirildi",staff_enable:"Xodim yoqildi",staff_disable:"Xodim o'chirildi",pin_change:"PIN o'zgartirildi",photo_add:"Rasm qo'shildi",photo_delete:"Rasm o'chirildi",export:"Excel yuklandi"};
+  settings:"Sozlama o'zgardi",staff_add:"Xodim qo'shildi",staff_pin_reset:"PIN almashtirildi",staff_unbind:"Telegram bog'lash ochildi",staff_enable:"Xodim yoqildi",staff_disable:"Xodim o'chirildi",pin_change:"PIN o'zgartirildi",photo_add:"Rasm qo'shildi",photo_delete:"Rasm o'chirildi",export:"Excel yuklandi"};
 
 /* ---------- server bilan aloqa ---------- */
 function api(method,path,body){
@@ -321,13 +351,13 @@ function lock(btn,fn){
 
 /* ---------- ko'rinish ---------- */
 function render(){
-  var root=$("#root");
+  var root=$("#root");document.body.classList.remove("menu-open");
   if(!ST){root.innerHTML='<div class="login"><h1>Yuklanmoqda...</h1></div>';return}
   if(!ST.valid){
     root.innerHTML='<div class="login"><div><h1>Stoyanka hisobi</h1><p class="meta" style="margin:6px 0 0">Stoyanka kodini kiriting. Kodni xizmat egasidan oling.</p></div>'+
       '<form class="form" id="codeform"><label class="f">Stoyanka kodi<input id="cd-code" autocapitalize="characters" autocomplete="off" spellcheck="false" required></label>'+
       '<p class="meta" id="cd-err" style="margin:0;color:#b91c1c"></p><button class="btn pri" type="submit">Davom etish</button></form></div>';
-    return;
+    heroify("Stoyanka hisobi");return;
   }
   if(ST.blocked){
     root.innerHTML='<div class="login"><h1>Obuna to\'xtatilgan</h1><p class="meta" style="margin:0">Xizmat muddati tugagan yoki vaqtincha to\'xtatilgan. Ma\'lumotlaringiz saqlanib turibdi, to\'lov qilingach hammasi avvalgidek ochiladi.</p>'+(ST.contact?'<div class="card"><div class="meta">Aloqa</div><b>'+esc(ST.contact)+'</b></div>':'')+'<button class="btn pri" onclick="location.reload()">Qayta tekshirish</button></div>';
@@ -339,23 +369,23 @@ function render(){
       '<label class="f">Sizning ismingiz<input id="su-name" autocomplete="off" required></label>'+
       '<label class="f">PIN (4 dan 8 gacha raqam)<input id="su-pin" type="password" inputmode="numeric" autocomplete="new-password" required></label>'+
       '<button class="btn pri" type="submit">Boshlash</button></form></div>';
-    return;
+    heroify(ST.lot);return;
   }
   if(!S.me){
     root.innerHTML='<div class="login"><div><h1>'+esc(ST.lot)+'</h1><p class="meta" style="margin:6px 0 0">Ismingizni tanlang va PIN kiriting.</p></div>'+
       '<form class="form" id="loginform"><label class="f">Xodim<select id="lg-name">'+ST.names.map(function(n){return '<option>'+esc(n)+'</option>'}).join("")+'</select></label>'+
       '<label class="f">PIN<input id="lg-pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>'+
       '<button class="btn pri" type="submit">Kirish</button></form></div>';
-    return;
+    heroify(ST.lot);return;
   }
   var tabs=isAdmin()?["in","out","rep","set"]:["in","out","set"];
   if(tabs.indexOf(tab)<0)tab="in";
   var titles={in:"Maydonda",out:"Chiqarilgan",rep:"Hisobot",set:isAdmin()?"Sozlamalar":"Profil"};
-  root.innerHTML='<div class="app"><header class="top"><div><h1>'+esc(S.set.name)+'</h1><small>'+titles[tab]+'</small></div>'+
-    '<button class="who" data-a="logout" aria-label="Chiqish">'+esc(S.me.name)+' &middot; chiqish</button></header>'+
+  root.innerHTML='<div class="app"><header class="top"><button class="hamb" data-a="menu" aria-label="Menyu">\u2630</button><div style="flex:1;min-width:0"><h1>'+esc(S.set.name)+'</h1><small>'+titles[tab]+'</small></div>'+
+    '<span class="who">'+esc(S.me.name)+'</span></header>'+
     '<main id="main"></main></div>'+
     (tab==="in"?'<button class="fab" data-a="newcar">+ Mashina qo\'shish</button>':'')+
-    '<nav class="tabbar" style="grid-template-columns:repeat('+tabs.length+',1fr)">'+tabs.map(function(k){return '<button data-a="tab" data-t="'+k+'"'+(k===tab?' aria-current="true"':'')+'>'+titles[k]+'</button>'}).join("")+'</nav>';
+    '<div class="scrim" data-a="menuclose"></div><aside class="drawer"><h2>'+esc(S.set.name)+'</h2>'+tabs.map(function(k){return '<button data-a="tab" data-t="'+k+'"'+(k===tab?' aria-current="true"':'')+'>'+titles[k]+'</button>'}).join("")+'<div class="sp"></div><button data-a="theme">'+themeLabel()+'</button><button data-a="logout" style="color:var(--danger)">Chiqish</button></aside>';
   renderMain();
 }
 function renderMain(){
@@ -438,8 +468,8 @@ function settingsHtml(){
     '<button class="btn pri" data-a="savesettings">Saqlash</button>'+
     '<div class="meta">Narxlar mashina toifasi tanlanganda o\'zi chiqadi. Yangi narxlar faqat keyin qo\'shiladigan mashinalarga ta\'sir qiladi, maydondagilarniki o\'zgarmaydi.</div></div>'+
     '<div class="card"><h2>Xodimlar</h2>'+adminData.staff.map(function(s){
-      return '<div class="list-row"><span>'+esc(s.name)+(s.role==="admin"?' <span class="pill warn">boshliq</span>':'')+(!s.active?' <span class="pill out">o\'chirilgan</span>':'')+'</span>'+
-        '<span style="display:flex;gap:6px">'+(s.active?'<button class="btn" style="flex:none;min-width:0;padding:8px 12px" data-a="resetpin" data-id="'+s.id+'">PIN</button>':'')+
+      return '<div class="list-row"><span>'+esc(s.name)+(s.role==="admin"?' <span class="pill warn">boshliq</span>':'')+(!s.active?' <span class="pill out">o\'chirilgan</span>':'')+(s.tg?' <span class="pill" title="Telegramga bog\'langan">\uD83D\uDD12</span>':'')+'</span>'+
+        '<span style="display:flex;gap:6px">'+(s.tg?'<button class="btn" style="flex:none;min-width:0;padding:8px 12px" data-a="unbind" data-id="'+s.id+'">\uD83D\uDD13</button>':'')+(s.active?'<button class="btn" style="flex:none;min-width:0;padding:8px 12px" data-a="resetpin" data-id="'+s.id+'">PIN</button>':'')+
         (s.name!==S.me.name?'<button class="btn '+(s.active?'dng':'')+'" style="flex:none;min-width:0;padding:8px 12px" data-a="togglestaff" data-id="'+s.id+'" data-on="'+(s.active?0:1)+'">'+(s.active?'O\'chirish':'Yoqish')+'</button>':'')+'</span></div>'}).join("")+
     '<form class="form" id="staffform" style="margin-top:10px"><label class="f">Yangi xodim ismi<input id="ns-name" autocomplete="off" required></label>'+
     '<div class="grid2"><label class="f">PIN<input id="ns-pin" inputmode="numeric" autocomplete="off" required placeholder="4-8 raqam"></label>'+
@@ -545,6 +575,10 @@ document.addEventListener("click",function(e){
   var t=e.target.closest("[data-a]");if(!t)return;
   var a=t.getAttribute("data-a"),id=t.getAttribute("data-id");
   if(a==="close"){closeModal();return}
+  if(a==="menu"){document.body.classList.add("menu-open");return}
+  if(a==="menuclose"){document.body.classList.remove("menu-open");return}
+  if(a==="theme"){THEME=THEME==="auto"?"light":THEME==="light"?"dark":"auto";try{localStorage.setItem("stoyanka-theme",THEME)}catch(x){}applyTheme();document.querySelectorAll('[data-a="theme"]').forEach(function(b){b.textContent=themeLabel()});return}
+  if(a==="unbind"){lock(t,function(){return api("PUT","/api/staff/"+id,{unbind:true}).then(loadAdmin).then(function(){renderMain();toast("Telegram bog'lash ochildi")})});return}
   if(a==="logout"){setToken("");S.me=null;adminData={staff:[],log:[]};api("GET","/api/status?k="+encodeURIComponent(K)).then(function(j){ST=j;render()},function(){render()});return}
   if(a==="tab"){
     tab=t.getAttribute("data-t");q="";render();
@@ -609,10 +643,10 @@ document.addEventListener("submit",function(e){
   var f=e.target;e.preventDefault();
   var btn=f.querySelector('button[type="submit"]');
   if(f.id==="setupform"){
-    lock(btn,function(){return api("POST","/api/setup",{k:K,lot:$("#su-lot").value,name:$("#su-name").value,pin:$("#su-pin").value}).then(function(j){
+    lock(btn,function(){return api("POST","/api/setup",{k:K,lot:$("#su-lot").value,name:$("#su-name").value,pin:$("#su-pin").value,tg:TG?TG.initData:""}).then(function(j){
       setToken(j.token);return refresh().then(function(){ST.setup=false;render()})})});
   }else if(f.id==="loginform"){
-    lock(btn,function(){return api("POST","/api/login",{k:K,name:$("#lg-name").value,pin:$("#lg-pin").value}).then(function(j){
+    lock(btn,function(){return api("POST","/api/login",{k:K,name:$("#lg-name").value,pin:$("#lg-pin").value,tg:TG?TG.initData:""}).then(function(j){
       setToken(j.token);return refresh().then(function(){tab="in";render()})})});
   }else if(f.id==="staffform"){
     lock(btn,function(){return api("POST","/api/staff",{name:$("#ns-name").value,pin:$("#ns-pin").value,role:$("#ns-role").value}).then(loadAdmin).then(function(){renderMain();toast("Xodim qo'shildi")})});

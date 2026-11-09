@@ -62,6 +62,30 @@ async function withCfg(env) {
   return { ...env, BOT_TOKEN: env.BOT_TOKEN || m.bot_token || "", OWNER_ID: env.OWNER_ID || m.owner_id || "" };
 }
 
+// Telegram Mini App initData tekshiruvi: to'g'ri bo'lsa foydalanuvchi ID sini qaytaradi
+export async function tgUser(env0, initData) {
+  try {
+    if (!initData || typeof initData !== "string" || initData.length > 4000) return null;
+    const env = await withCfg(env0);
+    if (!env.BOT_TOKEN) return null;
+    const p = new URLSearchParams(initData);
+    const hash = p.get("hash");
+    if (!hash) return null;
+    p.delete("hash");
+    const str = [...p.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, v]) => `${k}=${v}`).join("\n");
+    const hm = async (key, data) => {
+      const k = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      return new Uint8Array(await crypto.subtle.sign("HMAC", k, enc.encode(data)));
+    };
+    const sk = await hm(enc.encode("WebAppData"), env.BOT_TOKEN);
+    const calc = Array.from(await hm(sk, str), (x) => x.toString(16).padStart(2, "0")).join("");
+    if (calc !== hash) return null;
+    if (Date.now() / 1000 - Number(p.get("auth_date") || 0) > 86400) return null;
+    const u = JSON.parse(p.get("user") || "{}");
+    return Number.isFinite(u.id) ? u.id : null;
+  } catch { return null; }
+}
+
 const plain = (t, s = 200) => new Response(t, { status: s, headers: { "content-type": "text/plain; charset=utf-8" } });
 
 export async function setupWebhook(env0, url) {
@@ -540,13 +564,14 @@ async function receipt(env, url, chat, from, msg, st) {
 }
 
 async function staffView(env, url, t) {
-  const rows = (await env.DB.prepare("SELECT id,name,role,active FROM staff WHERE tenant_id=? ORDER BY active DESC, name LIMIT 12").bind(t.id).all()).results;
+  const rows = (await env.DB.prepare("SELECT id,name,role,active,tg_id FROM staff WHERE tenant_id=? ORDER BY active DESC, name LIMIT 12").bind(t.id).all()).results;
   const text = rows.length
-    ? "<b>Xodimlar</b>\n" + rows.map((r) => `${r.active ? "•" : "⏸"} ${esc(r.name)}${r.role === "admin" ? " 👑" : ""}`).join("\n") + `\n\nSayt: ${esc(linkOf(url, t))}`
+    ? "<b>Xodimlar</b> (🔒 = Telegramga bog'langan, 🔓 = bog'lashni ochish, 🔑 = PIN, ⏸ = o'chirish)\n" + rows.map((r) => `${r.active ? "•" : "⏸"} ${esc(r.name)}${r.role === "admin" ? " 👑" : ""}${r.tg_id ? " 🔒" : ""}`).join("\n") + `\n\nSayt: ${esc(linkOf(url, t))}`
     : "Hali xodim yo'q. Xodim qo'shing va unga sayt havolasi bilan PIN bering.";
   const kb = rows.map((r) => [
-    { text: `🔑 ${r.name}`.slice(0, 30), callback_data: `sp:${r.id}` },
-    { text: r.active ? "⏸ O'chirish" : "▶️ Yoqish", callback_data: `sa:${r.id}` },
+    { text: `🔑 ${r.name}`.slice(0, 24), callback_data: `sp:${r.id}` },
+    { text: r.active ? "⏸" : "▶️", callback_data: `sa:${r.id}` },
+    ...(r.tg_id ? [{ text: "🔓", callback_data: `su:${r.id}` }] : []),
   ]);
   kb.push([{ text: "➕ Xodim qo'shish", callback_data: "sn:0" }], [{ text: "⬅️ Panel", callback_data: "bk:0" }]);
   return { text, kb: { inline_keyboard: kb } };
@@ -600,6 +625,11 @@ async function bossCallback(env, url, q) {
     if (!st || st.step !== "s_role") return;
     await setSt(env, uid, "s_pin", { name: st.data.name, role: n === 1 ? "admin" : "staff" });
     return say(env, chat, `<b>${esc(st.data.name)}</b> uchun PIN kod o'ylab toping va yozing (4 dan 8 gacha raqam). Yozgan xabaringiz xavfsizlik uchun o'chiriladi.`);
+  }
+  if (kind === "su") {
+    await env.DB.prepare("UPDATE staff SET tg_id=NULL WHERE id=? AND tenant_id=?").bind(n, t.id).run();
+    const v = await staffView(env, url, t);
+    return show(env, q, v.text, v.kb);
   }
   if (kind === "sp" || kind === "sa") {
     const s = await env.DB.prepare("SELECT * FROM staff WHERE id=? AND tenant_id=?").bind(n, t.id).first();

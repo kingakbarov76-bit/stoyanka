@@ -1,7 +1,7 @@
 // Stoyanka hisobi: Cloudflare Worker (API + Telegram bot) va D1 baza.
 // Statik sayt public/ papkasidan beriladi. /api/* mijozlar uchun, /tg/* Telegram bot uchun.
 
-import { handleHook, setupWebhook, dailyReminder } from "./bot.js";
+import { handleHook, setupWebhook, dailyReminder, tgUser } from "./bot.js";
 import { makeXlsx } from "./xlsx.js";
 
 const DAY = 864e5;
@@ -205,6 +205,8 @@ async function api(req, env, url) {
     await env.DB.prepare("INSERT INTO staff(tenant_id,name,pin_hash,salt,role,active,created_at) VALUES(?,?,?,?,?,1,?)")
       .bind(t.id, name, await hashPin(String(body.pin), salt), salt, "admin", Date.now()).run();
     await setSetting(env, t.id, "lot", lot);
+    const tgS = await tgUser(env, body.tg);
+    if (tgS) await env.DB.prepare("UPDATE staff SET tg_id=? WHERE tenant_id=? AND name=?").bind(tgS, t.id, name).run();
     await logAct(env, t.id, { name }, "setup", null, "Tizim sozlandi");
     return J({ token: await makeToken(env, t.id, name) });
   }
@@ -222,6 +224,13 @@ async function api(req, env, url) {
       const n = Date.now() - f.t < 5 * 60e3 ? f.n + 1 : 1;
       await setSetting(env, 0, fk, JSON.stringify({ n, t: Date.now() }));
       return err("Ism yoki PIN noto'g'ri", 401);
+    }
+    const tgId = await tgUser(env, body.tg);
+    if (u.tg_id) {
+      if (!tgId) return err("Bu akkaunt Telegramga bog'langan. Botdagi \"Ilova\" tugmasi orqali kiring.", 403);
+      if (tgId !== u.tg_id) return err("Bu akkaunt boshqa Telegramga bog'langan. Boshliqdan bog'lashni ochishni so'rang.", 403);
+    } else if (tgId) {
+      await env.DB.prepare("UPDATE staff SET tg_id=? WHERE id=?").bind(tgId, u.id).run();
     }
     await env.DB.prepare("DELETE FROM settings WHERE tenant_id=0 AND key=?").bind(fk).run();
     await logAct(env, t.id, u, "login");
@@ -410,7 +419,7 @@ async function api(req, env, url) {
     return J({ log: rows });
   }
   if (path === "/api/staff" && m === "GET") {
-    const rows = (await env.DB.prepare("SELECT id,name,role,active FROM staff WHERE tenant_id=? ORDER BY active DESC, name").bind(T).all()).results;
+    const rows = (await env.DB.prepare("SELECT id,name,role,active,CASE WHEN tg_id IS NULL THEN 0 ELSE 1 END tg FROM staff WHERE tenant_id=? ORDER BY active DESC, name").bind(T).all()).results;
     return J({ staff: rows });
   }
   if (path === "/api/staff" && m === "POST") {
@@ -435,6 +444,10 @@ async function api(req, env, url) {
       const salt = hex(crypto.getRandomValues(new Uint8Array(12)));
       await env.DB.prepare("UPDATE staff SET pin_hash=?, salt=? WHERE id=?").bind(await hashPin(String(body.pin), salt), salt, id).run();
       await logAct(env, T, u, "staff_pin_reset", null, t.name);
+    }
+    if (body.unbind) {
+      await env.DB.prepare("UPDATE staff SET tg_id=NULL WHERE id=?").bind(id).run();
+      await logAct(env, T, u, "staff_unbind", null, t.name);
     }
     if (body.active != null) {
       if (id === u.id) return err("O'zingizni o'chira olmaysiz", 400);
