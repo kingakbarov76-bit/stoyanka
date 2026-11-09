@@ -1,0 +1,17 @@
+{
+  "name": "stoyanka",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stoyanka",
+      "database_id": "0836a330-fdf6-46d8-ba22-4c095af13304"
+    }
+  ]
+}

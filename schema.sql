@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS staff (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, pin_hash TEXT NOT NULL, salt TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'staff', active INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS cars (id TEXT PRIMARY KEY, plate TEXT NOT NULL, type TEXT, model TEXT, color TEXT, brought_by TEXT, driver TEXT, phone TEXT, reason TEXT, in_at INTEGER NOT NULL, note TEXT, tariff INTEGER NOT NULL, evac INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'in', created_by TEXT, out_at INTEGER, out_by TEXT, out_days INTEGER, out_storage INTEGER, out_evac INTEGER, out_discount INTEGER, out_paid INTEGER);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, staff TEXT, action TEXT NOT NULL, car_id TEXT, detail TEXT);
+CREATE INDEX IF NOT EXISTS idx_cars_status_plate ON cars(status, plate);
