@@ -108,7 +108,7 @@ async function tenantByCode(env, code) {
 
 /* ---------- ma'lumot ---------- */
 async function getSettings(env, tid) {
-  const rows = (await env.DB.prepare("SELECT key,value FROM settings WHERE tenant_id=? AND key IN ('lot','tariff','evac','prices','phone','address','staffprice')").bind(tid).all()).results;
+  const rows = (await env.DB.prepare("SELECT key,value FROM settings WHERE tenant_id=? AND key IN ('lot','tariff','evac','prices','phone','address','staffprice','lookup')").bind(tid).all()).results;
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const num = (v, d) => (v == null || isNaN(Number(v)) ? d : Number(v));
   const defT = num(m.tariff, 48000), defE = num(m.evac, 1000000);
@@ -119,7 +119,7 @@ async function getSettings(env, tid) {
     const q = saved[ty] || {};
     prices[ty] = { tariff: num(q.tariff, defT), evac: num(q.evac, defE) };
   }
-  return { name: m.lot || "Shtrafstoyanka", tariff: defT, evac: defE, prices, phone: m.phone || "", address: m.address || "", staffPrice: m.staffprice === "1" };
+  return { name: m.lot || "Shtrafstoyanka", tariff: defT, evac: defE, prices, phone: m.phone || "", address: m.address || "", staffPrice: m.staffprice === "1", publicLookup: m.lookup === "1" };
 }
 const setSetting = (env, tid, k, v) =>
   env.DB.prepare("INSERT INTO settings(tenant_id,key,value) VALUES(?,?,?) ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value")
@@ -390,6 +390,7 @@ async function api(req, env, url) {
     await setSetting(env, T, "phone", str(body.phone, 60));
     await setSetting(env, T, "address", str(body.address, 150));
     await setSetting(env, T, "staffprice", body.staffPrice ? "1" : "0");
+    await setSetting(env, T, "lookup", body.publicLookup ? "1" : "0");
     await setSetting(env, T, "prices", JSON.stringify(prices));
     await setSetting(env, T, "tariff", prices["Yengil avtomobil"].tariff);
     await setSetting(env, T, "evac", prices["Yengil avtomobil"].evac);

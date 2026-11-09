@@ -420,6 +420,7 @@ function settingsHtml(){
     '<label class="f">Manzil<input id="s-addr" value="'+esc(S.set.address||"")+'"></label>'+
     TYPES.map(function(t,i){var p=priceOf(t);return '<div class="prow"><b>'+esc(t)+'</b><div class="grid2"><label class="f">Saqlash, 1 kun<input id="pt-'+i+'" inputmode="numeric" value="'+p.tariff+'"></label><label class="f">Evakuatsiya<input id="pe-'+i+'" inputmode="numeric" value="'+p.evac+'"></label></div></div>'}).join("")+
     '<label class="chk"><input type="checkbox" id="s-sp"'+(S.set.staffPrice?' checked':'')+'><span>Xodim mashina qo\'shayotganda narxni o\'zgartira oladi</span></label>'+
+    '<label class="chk"><input type="checkbox" id="s-pl"'+(S.set.publicLookup?' checked':'')+'><span>Mashina egasi Telegram botga raqam yozib, mashinasi bor-yo\'qligini va to\'lov summasini ko\'ra oladi</span></label>'+
     '<button class="btn pri" data-a="savesettings">Saqlash</button>'+
     '<div class="meta">Narxlar mashina toifasi tanlanganda o\'zi chiqadi. Yangi narxlar faqat keyin qo\'shiladigan mashinalarga ta\'sir qiladi, maydondagilarniki o\'zgarmaydi.</div></div>'+
     '<div class="card"><h2>Xodimlar</h2>'+adminData.staff.map(function(s){
@@ -573,7 +574,7 @@ document.addEventListener("click",function(e){
     lock(null,function(){return api("DELETE","/api/cars/"+id).then(function(){S.cars=S.cars.filter(function(c){return c.id!==id});closeModal();render();toast("O'chirildi")})})})}
   else if(a==="savesettings"){
     var prices={};TYPES.forEach(function(ty,i){prices[ty]={tariff:num($("#pt-"+i).value),evac:num($("#pe-"+i).value)}});
-    lock(t,function(){return api("PUT","/api/settings",{name:$("#s-name").value,phone:$("#s-phone").value,address:$("#s-addr").value,staffPrice:$("#s-sp").checked,prices:prices}).then(function(s){S.set=s;render();loadAdmin().then(function(){renderMain()});toast("Saqlandi")})});
+    lock(t,function(){return api("PUT","/api/settings",{name:$("#s-name").value,phone:$("#s-phone").value,address:$("#s-addr").value,staffPrice:$("#s-sp").checked,publicLookup:$("#s-pl").checked,prices:prices}).then(function(s){S.set=s;render();loadAdmin().then(function(){renderMain()});toast("Saqlandi")})});
   }
   else if(a==="togglestaff"){
     var on=t.getAttribute("data-on")==="1";

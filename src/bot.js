@@ -252,7 +252,7 @@ async function lookup(env, chat, text) {
   const norm = normPlateText(text);
   if (norm.length < 5 || norm.length > 10) return say(env, chat, "Davlat raqamini to'g'ri yozing. Masalan: <code>20 R 981 JA</code>");
   const rows = (await env.DB.prepare(
-    "SELECT c.*, t.name tname FROM cars c JOIN tenants t ON t.id=c.tenant_id WHERE c.status='in' AND REPLACE(UPPER(c.plate),' ','')=? AND t.active=1 AND t.expires_at>=? LIMIT 5"
+    "SELECT c.*, t.name tname FROM cars c JOIN tenants t ON t.id=c.tenant_id WHERE c.status='in' AND REPLACE(UPPER(c.plate),' ','')=? AND t.active=1 AND t.expires_at>=? AND EXISTS (SELECT 1 FROM settings s WHERE s.tenant_id=c.tenant_id AND s.key='lookup' AND s.value='1') LIMIT 5"
   ).bind(norm, Date.now()).all()).results;
   if (!rows.length) {
     return say(env, chat, `<b>${esc(text.trim().slice(0, 20).toUpperCase())}</b> raqamli mashina shtrafstoyankada topilmadi.\nRaqamni to'g'ri yozganingizni tekshiring.`);

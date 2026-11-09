@@ -36,7 +36,7 @@ Har kuni 09:00 (Toshkent) 3 kun ichida tugaydigan mijozlar haqida eslatma keladi
 
 ## Mashina egasi uchun bot
 
-Botga istalgan odam mashina raqamini yozsa (masalan `20 R 981 JA`), mashina maydonda bo'lsa stoyanka nomi, qabul sanasi, kun, to'lash kerak bo'lgan summa, telefon va manzil ko'rsatiladi. Haydovchi telefoni va xodim ismlari ko'rsatilmaydi. Muddati tugagan yoki to'xtatilgan mijozning mashinalari ko'rinmaydi. Boshqaruv buyruqlari faqat egasida ishlaydi.
+Bu imkoniyat har bir stoyankada boshida **o'chiq**. Boshliq sozlamalarda yoqadi. Yoqilgach botga istalgan odam mashina raqamini yozsa (masalan `20 R 981 JA`), mashina maydonda bo'lsa stoyanka nomi, qabul sanasi, kun, to'lash kerak bo'lgan summa, telefon va manzil ko'rsatiladi. Haydovchi telefoni va xodim ismlari ko'rsatilmaydi. Muddati tugagan yoki to'xtatilgan mijozning mashinalari ko'rinmaydi. Boshqaruv buyruqlari faqat egasida ishlaydi.
 
 ## Qoidalar
 
