@@ -5,7 +5,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/tg/*"]
   },
   "d1_databases": [
     {
@@ -13,5 +13,8 @@
       "database_name": "stoyanka",
       "database_id": "0836a330-fdf6-46d8-ba22-4c095af13304"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 4 * * *"]
+  }
 }

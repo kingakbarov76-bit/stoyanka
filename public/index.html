@@ -117,7 +117,9 @@ textarea.raw{width:100%;min-height:140px;font-family:var(--mono);font-size:12px;
 var DAY=864e5, TZ=5*36e5, TOKKEY="stoyanka-token";
 var token="", S={me:null,set:{name:"Shtrafstoyanka",tariff:48000,evac:1000000},cars:[]}, ST=null, adminData={staff:[],log:[]};
 var tab="in", q="", busy=false;
+var K="";
 try{token=localStorage.getItem(TOKKEY)||""}catch(e){}
+try{var qk=new URLSearchParams(location.search).get("k");if(qk){K=qk.trim().toUpperCase();localStorage.setItem("stoyanka-k",K);history.replaceState(null,"",location.pathname)}else{K=localStorage.getItem("stoyanka-k")||""}}catch(e){}
 
 /* ---------- yordamchilar ---------- */
 function $(s){return document.querySelector(s)}
@@ -152,7 +154,9 @@ function api(method,path,body){
   return fetch(path,{method:method,headers:h,body:body?JSON.stringify(body):undefined}).then(function(r){
     return r.json().catch(function(){return {}}).then(function(j){
       if(r.status===401&&token&&path!=="/api/login"){setToken("");S.me=null;render();var e0=new Error("Qayta kiring");e0.handled=true;throw e0}
-      if(!r.ok){var e=new Error(j.error||"Xatolik yuz berdi");e.status=r.status;throw e}
+      if(!r.ok){var e=new Error(j.error||"Xatolik yuz berdi");e.status=r.status;e.data=j;
+        if(r.status===402&&j.blocked){ST=ST||{valid:true};ST.valid=true;ST.blocked=true;ST.contact=j.contact||"";S.me=null;setToken("");e.handled=true;render()}
+        throw e}
       return j;
     });
   },function(){var e=new Error("Internet yo'q yoki server javob bermayapti");e.offline=true;throw e});
@@ -160,7 +164,7 @@ function api(method,path,body){
 function setToken(t){token=t;try{if(t)localStorage.setItem(TOKKEY,t);else localStorage.removeItem(TOKKEY)}catch(e){}}
 function fail(e){if(!e.handled)toast(e.message||"Xatolik")}
 function refresh(){
-  return api("GET","/api/state").then(function(j){S.me=j.me;S.set=j.settings;S.cars=j.cars});
+  return api("GET","/api/state").then(function(j){S.me=j.me;S.set=j.settings;S.sub=j.sub;S.cars=j.cars});
 }
 function loadAdmin(){
   if(!isAdmin())return Promise.resolve();
@@ -189,6 +193,14 @@ function lock(btn,fn){
 function render(){
   var root=$("#root");
   if(!ST){root.innerHTML='<div class="login"><h1>Yuklanmoqda...</h1></div>';return}
+  if(!ST.valid){
+    root.innerHTML='<div class="login"><h1>Havola kerak</h1><p class="meta" style="margin:0">Bu sayt faqat shaxsiy havola orqali ochiladi. Havolani xizmat egasidan so\'rang va uni qayta oching.</p></div>';
+    return;
+  }
+  if(ST.blocked){
+    root.innerHTML='<div class="login"><h1>Obuna to\'xtatilgan</h1><p class="meta" style="margin:0">Xizmat muddati tugagan yoki vaqtincha to\'xtatilgan. Ma\'lumotlaringiz saqlanib turibdi, to\'lov qilingach hammasi avvalgidek ochiladi.</p>'+(ST.contact?'<div class="card"><div class="meta">Aloqa</div><b>'+esc(ST.contact)+'</b></div>':'')+'<button class="btn pri" onclick="location.reload()">Qayta tekshirish</button></div>';
+    return;
+  }
   if(ST.setup){
     root.innerHTML='<div class="login"><div><h1>Birinchi sozlash</h1><p class="meta" style="margin:6px 0 0">Siz boshliq bo\'lasiz. Keyin boshqa xodimlarni qo\'shasiz.</p></div>'+
       '<form class="form" id="setupform"><label class="f">Stoyanka nomi<input id="su-lot" value="Shtrafstoyanka"></label>'+
@@ -217,11 +229,15 @@ function render(){
 function renderMain(){
   var m=$("#main");if(!m)return;
   if(tab==="in"||tab==="out"){
-    m.innerHTML='<input class="search" id="q" type="search" placeholder="Raqam, model yoki haydovchi bo\'yicha qidirish" value="'+esc(q)+'" aria-label="Qidirish"><div id="list"></div>';
+    m.innerHTML=subBanner()+'<input class="search" id="q" type="search" placeholder="Raqam, model yoki haydovchi bo\'yicha qidirish" value="'+esc(q)+'" aria-label="Qidirish"><div id="list"></div>';
     renderList();
     $("#q").oninput=function(e){q=e.target.value;renderList()};
-  }else if(tab==="rep"){m.innerHTML=reportHtml()}
+  }else if(tab==="rep"){m.innerHTML=subBanner()+reportHtml()}
   else{m.innerHTML=settingsHtml()}
+}
+function subBanner(){
+  if(!isAdmin()||!S.sub||S.sub.daysLeft>5)return "";
+  return '<div class="banner"><span>Obuna '+(S.sub.daysLeft>0?S.sub.daysLeft+' kunda tugaydi':'bugun tugaydi')+'.'+(S.sub.contact?' Uzaytirish uchun: '+esc(S.sub.contact):'')+'</span></div>';
 }
 function renderList(){
   var want=tab==="in"?"in":"out";
@@ -276,6 +292,7 @@ function reportHtml(){
 function settingsHtml(){
   var h='';
   if(isAdmin()){
+    if(S.sub)h+='<div class="card"><h2>Obuna</h2><div class="meta">Tugaydi: '+fmtDate(S.sub.expiresAt).slice(0,10)+' ('+S.sub.daysLeft+' kun qoldi)'+(S.sub.contact?'. Aloqa: '+esc(S.sub.contact):'')+'</div></div>';
     h+='<div class="card form"><h2>Tariflar</h2>'+
     '<label class="f">Stoyanka nomi<input id="s-name" value="'+esc(S.set.name)+'"></label>'+
     '<div class="grid2"><label class="f">Saqlash (so\'m/kun)<input id="s-tariff" inputmode="numeric" value="'+S.set.tariff+'"></label>'+
@@ -381,7 +398,7 @@ document.addEventListener("click",function(e){
   var t=e.target.closest("[data-a]");if(!t)return;
   var a=t.getAttribute("data-a"),id=t.getAttribute("data-id");
   if(a==="close"){closeModal();return}
-  if(a==="logout"){setToken("");S.me=null;adminData={staff:[],log:[]};api("GET","/api/status").then(function(j){ST=j;render()},function(){render()});return}
+  if(a==="logout"){setToken("");S.me=null;adminData={staff:[],log:[]};api("GET","/api/status?k="+encodeURIComponent(K)).then(function(j){ST=j;render()},function(){render()});return}
   if(a==="tab"){
     tab=t.getAttribute("data-t");q="";render();
     if(tab==="set"&&isAdmin())loadAdmin().then(function(){if(tab==="set")renderMain()}).catch(fail);
@@ -410,10 +427,10 @@ document.addEventListener("submit",function(e){
   var f=e.target;e.preventDefault();
   var btn=f.querySelector('button[type="submit"]');
   if(f.id==="setupform"){
-    lock(btn,function(){return api("POST","/api/setup",{lot:$("#su-lot").value,name:$("#su-name").value,pin:$("#su-pin").value}).then(function(j){
+    lock(btn,function(){return api("POST","/api/setup",{k:K,lot:$("#su-lot").value,name:$("#su-name").value,pin:$("#su-pin").value}).then(function(j){
       setToken(j.token);return refresh().then(function(){ST.setup=false;render()})})});
   }else if(f.id==="loginform"){
-    lock(btn,function(){return api("POST","/api/login",{name:$("#lg-name").value,pin:$("#lg-pin").value}).then(function(j){
+    lock(btn,function(){return api("POST","/api/login",{k:K,name:$("#lg-name").value,pin:$("#lg-pin").value}).then(function(j){
       setToken(j.token);return refresh().then(function(){tab="in";render()})})});
   }else if(f.id==="staffform"){
     lock(btn,function(){return api("POST","/api/staff",{name:$("#ns-name").value,pin:$("#ns-pin").value,role:$("#ns-role").value}).then(loadAdmin).then(function(){renderMain();toast("Xodim qo'shildi")})});
@@ -448,9 +465,9 @@ document.addEventListener("visibilitychange",function(){if(!document.hidden)tick
 
 /* ---------- boshlash ---------- */
 render();
-api("GET","/api/status").then(function(j){
+api("GET","/api/status?k="+encodeURIComponent(K)).then(function(j){
   ST=j;
-  if(token&&!j.setup){return refresh().catch(function(e){if(!e.offline)setToken("")})}
+  if(token&&j.valid&&!j.blocked&&!j.setup){return refresh().catch(function(e){if(!e.offline)setToken("")})}
 }).then(render).catch(function(e){
   $("#root").innerHTML='<div class="login"><h1>Ulanib bo\'lmadi</h1><p class="meta">'+esc(e.message)+'</p><button class="btn pri" onclick="location.reload()">Qayta urinish</button></div>';
 });
