@@ -45,3 +45,11 @@ Bu imkoniyat har bir stoyankada boshida **o'chiq**. Boshliq sozlamalarda yoqadi.
 - Kun hisobi Toshkent vaqti (UTC+5) bo'yicha: qabul kunidan bugungacha, kamida 1 kun.
 - Yakuniy summani server hisoblaydi. Xodim tarifni o'zgartira olmaydi, mashinani o'chira olmaydi, hisobotni ko'rmaydi.
 - Barcha harakatlar tarixga yoziladi.
+
+## Bot: uch xil foydalanuvchi
+
+- **Oddiy odam** `/start` → "Mashinam shtrafstoyankadami?" → raqam yozadi (faqat stoyanka yoqib qo'ygan bo'lsa natija chiqadi).
+- **Boshliq** `/start` → "Men stoyanka boshlig'iman" → nom, telefon, manzil → kartaga to'lov + chek rasmi → egasi tasdiqlaydi → panel: narxlar, xodimlar (ism + PIN), sayt havolasi, bugungi tushum, tekshiruv tumbleri, obunani uzaytirish.
+- **Egasi** (OWNER_ID): chek rasmi bilan ariza keladi, `✅ 30/90/365 kun` yoki `❌` bosadi. Yangi buyruqlar: `/karta ...` (to'lov kartasi), `/boshliq 5 123456` (qo'lda qo'shilgan mijozni boshliqqa bog'lash).
+
+Sayt faqat xodimlar uchun. Eski bazaga migratsiya: `schema.sql` dagi `owner_tg`, `pending`, `applied_at` ustunlari va `bot_state` jadvali.
