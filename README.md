@@ -15,10 +15,10 @@ Repo Cloudflare Workers'ga ulangan. `main` ga push qilinsa o'zi qayta joylanadi.
 ## Telegram botni ulash (bir marta)
 
 1. Telegramda @BotFather orqali yangi bot oching va tokenni oling.
-2. Cloudflare, Workers, `stoyanka`, Settings, **Variables and Secrets** bo'limida **Secret** sifatida qo'shing: `BOT_TOKEN` (token). Deploy qiling.
+2. Tokenni Cloudflare'da **Secret** sifatida `BOT_TOKEN` nomi bilan qo'shing, yoki bazadagi `settings` jadvaliga (`tenant_id=0`, `key='bot_token'`) yozing. Kod ikkalasini ham o'qiydi.
 3. Brauzerda `https://<sayt manzili>/tg/setup` ni oching. "Bot ulandi" yozuvi chiqadi.
 4. Botga `/start` yozing. U sizning Telegram ID raqamingizni ko'rsatadi.
-5. Shu raqamni **Secret** sifatida `OWNER_ID` nomi bilan qo'shing va yana deploy qiling. Shundan keyin bot faqat sizga javob beradi.
+5. Shu raqamni `OWNER_ID` nomi bilan Secret qilib qo'shing yoki bazaga `key='owner_id'` sifatida yozing. Shundan keyin bot faqat sizga javob beradi.
 
 ## Bot buyruqlari
 

@@ -50,10 +50,19 @@ const HELP =
   "/hisob: holat va tushum\n" +
   "/ochir 5 HA: mijoz va uning barcha ma'lumotini o'chirish";
 
+// Token va egasi ID si: avval Cloudflare Secret, bo'lmasa bazadagi sozlamadan (tenant 0).
+async function withCfg(env) {
+  if (env.BOT_TOKEN && env.OWNER_ID) return env;
+  const rows = (await env.DB.prepare("SELECT key,value FROM settings WHERE tenant_id=0 AND key IN ('bot_token','owner_id')").all()).results;
+  const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  return { ...env, BOT_TOKEN: env.BOT_TOKEN || m.bot_token || "", OWNER_ID: env.OWNER_ID || m.owner_id || "" };
+}
+
 const plain = (t, s = 200) => new Response(t, { status: s, headers: { "content-type": "text/plain; charset=utf-8" } });
 
-export async function setupWebhook(env, url) {
-  if (!env.BOT_TOKEN) return plain("BOT_TOKEN topilmadi. Cloudflare, Settings, Variables and Secrets bo'limiga BOT_TOKEN nomi bilan (Secret) qo'shing va qayta deploy qiling.");
+export async function setupWebhook(env0, url) {
+  const env = await withCfg(env0);
+  if (!env.BOT_TOKEN) return plain("Bot tokeni topilmadi.");
   const r = await tg(env, "setWebhook", {
     url: url.origin + "/tg/hook",
     secret_token: await hookSecret(env),
@@ -244,7 +253,8 @@ async function callback(env, url, q) {
   return tg(env, "editMessageText", { chat_id: chat, message_id: mid, text: await card(env, url, t), parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard(t) });
 }
 
-export async function handleHook(req, env, url) {
+export async function handleHook(req, env0, url) {
+  const env = await withCfg(env0);
   if (!env.BOT_TOKEN) return new Response("ok");
   if (req.headers.get("x-telegram-bot-api-secret-token") !== (await hookSecret(env))) return new Response("no", { status: 403 });
   let upd;
@@ -255,7 +265,7 @@ export async function handleHook(req, env, url) {
   if (!from || !chat) return new Response("ok");
 
   if (!env.OWNER_ID) {
-    await say(env, chat, `Sizning Telegram ID raqamingiz: <code>${from.id}</code>\nUni Cloudflare'da <b>OWNER_ID</b> nomi bilan (Secret) saqlang va qayta deploy qiling. Shundan keyin bot faqat sizga javob beradi.`);
+    await say(env, chat, `Sizning Telegram ID raqamingiz: <code>${from.id}</code>\nShu raqamni suhbatda yozing, bot faqat sizga javob beradigan qilib qo'yiladi.`);
     return new Response("ok");
   }
   if (String(from.id) !== String(env.OWNER_ID)) {
@@ -269,7 +279,8 @@ export async function handleHook(req, env, url) {
 }
 
 /* ---------- kunlik eslatma (cron) ---------- */
-export async function dailyReminder(env) {
+export async function dailyReminder(env0) {
+  const env = await withCfg(env0);
   if (!env.BOT_TOKEN || !env.OWNER_ID) return;
   const now = Date.now();
   const rows = (await env.DB.prepare("SELECT * FROM tenants WHERE active=1 AND expires_at<? AND expires_at>? ORDER BY expires_at").bind(now + 3 * DAY, now - 7 * DAY).all()).results;
